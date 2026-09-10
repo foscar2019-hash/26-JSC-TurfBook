@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="turf_emerald_primary">#059669</color>
+    <color name="turf_emerald_dark">#064E3B</color>
+    <color name="turf_emerald_light">#10B981</color>
+    <color name="turf_surface">#0F172A</color>
+    <color name="turf_background">#090D16</color>
+    <color name="white">#FFFFFF</color>
+</resources>
