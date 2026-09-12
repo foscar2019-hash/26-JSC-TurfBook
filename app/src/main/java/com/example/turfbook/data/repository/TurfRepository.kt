@@ -9,6 +9,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
+import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 
@@ -41,6 +42,10 @@ class TurfRepository(private val dao: TurfDao) {
     }
 
     val galleryImages: Flow<List<GameImage>> = dao.getAllGalleryImages().map { list ->
+        list.map { it.toModel() }
+    }
+
+    val referrals: Flow<List<ReferralInvite>> = dao.getAllReferrals().map { list ->
         list.map { it.toModel() }
     }
 
@@ -89,6 +94,10 @@ class TurfRepository(private val dao: TurfDao) {
         dao.incrementLikes(imageId)
     }
 
+    suspend fun insertReferral(referral: ReferralInvite) {
+        dao.insertReferral(referral.toEntity())
+    }
+
     private suspend fun seedInitialDataIfNeeded() {
         val existingPitches = dao.getAllPitches().first()
         if (existingPitches.isEmpty()) {
@@ -113,6 +122,11 @@ class TurfRepository(private val dao: TurfDao) {
         val existingImages = dao.getAllGalleryImages().first()
         if (existingImages.isEmpty()) {
             dao.insertGalleryImages(getInitialGalleryImages().map { it.toEntity() })
+        }
+
+        val existingReferrals = dao.getAllReferrals().first()
+        if (existingReferrals.isEmpty()) {
+            dao.insertReferrals(getInitialReferrals().map { it.toEntity() })
         }
     }
 
@@ -315,7 +329,11 @@ class TurfRepository(private val dao: TurfDao) {
         )
 
         fun getInitialBookings(): List<Booking> {
-            val today = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
+            val cal = Calendar.getInstance()
+            val today = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(cal.time)
+            cal.add(Calendar.DAY_OF_YEAR, 1)
+            val tomorrow = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(cal.time)
+
             return listOf(
                 Booking(
                     id = "b-1001",
@@ -362,6 +380,29 @@ class TurfRepository(private val dao: TurfDao) {
                     addOns = emptyList(),
                     notes = "Weekly team training",
                     createdAt = "2026-09-08 16:30"
+                ),
+                Booking(
+                    id = "b-1003",
+                    referenceCode = "JSC-9022",
+                    pitchId = "pitch-1",
+                    pitchName = "Pitch 1 - Championship Arena",
+                    date = tomorrow,
+                    startTime = "18:00",
+                    endTime = "19:00",
+                    durationHours = 1,
+                    customerName = "Axmed Cali",
+                    teamName = "26 June Warriors FC",
+                    customerPhone = "+252633347832",
+                    customerEmail = "foscar2019@gmail.com",
+                    paymentMethod = PaymentMethod.ZAAD,
+                    paymentStatus = "paid",
+                    transactionId = "ZD-991204",
+                    merchantNumber = "445686",
+                    totalAmount = 25.0,
+                    loyaltyPoints = 250,
+                    addOns = listOf("addon-referee"),
+                    notes = "Super League Match scheduled for tomorrow night",
+                    createdAt = "2026-09-12 10:00"
                 )
             )
         }
@@ -451,6 +492,29 @@ class TurfRepository(private val dao: TurfDao) {
                 likes = 29
             )
         )
+
+        fun getInitialReferrals(): List<ReferralInvite> = listOf(
+            ReferralInvite(
+                id = "ref-201",
+                friendName = "Cabdiraxmaan Jaamac",
+                friendPhone = "+252634123456",
+                referralCode = "JSC-WARRIOR26",
+                status = "COMPLETED",
+                bonusPoints = 150,
+                date = "2026-09-09",
+                bookingReference = "JSC-9041"
+            ),
+            ReferralInvite(
+                id = "ref-202",
+                friendName = "Farxaan Warsame",
+                friendPhone = "+252634998877",
+                referralCode = "JSC-WARRIOR26",
+                status = "COMPLETED",
+                bonusPoints = 150,
+                date = "2026-09-11",
+                bookingReference = "JSC-9114"
+            )
+        )
     }
 }
 
@@ -508,6 +572,8 @@ fun BookingEntity.toModel() = Booking(
     merchantNumber = merchantNumber,
     totalAmount = totalAmount,
     loyaltyPoints = loyaltyPoints,
+    referralCodeApplied = referralCodeApplied,
+    referralBonusPoints = referralBonusPoints,
     addOns = addOns,
     notes = notes,
     createdAt = createdAt,
@@ -533,6 +599,8 @@ fun Booking.toEntity() = BookingEntity(
     merchantNumber = merchantNumber,
     totalAmount = totalAmount,
     loyaltyPoints = loyaltyPoints,
+    referralCodeApplied = referralCodeApplied,
+    referralBonusPoints = referralBonusPoints,
     addOns = addOns,
     notes = notes,
     createdAt = createdAt,
@@ -637,4 +705,26 @@ fun GalleryImageEntity.toModel() = GameImage(
     pitchName = pitchName,
     teamsInvolved = teamsInvolved,
     likes = likes
+)
+
+fun ReferralEntity.toModel() = ReferralInvite(
+    id = id,
+    friendName = friendName,
+    friendPhone = friendPhone,
+    referralCode = referralCode,
+    status = status,
+    bonusPoints = bonusPoints,
+    date = date,
+    bookingReference = bookingReference
+)
+
+fun ReferralInvite.toEntity() = ReferralEntity(
+    id = id,
+    friendName = friendName,
+    friendPhone = friendPhone,
+    referralCode = referralCode,
+    status = status,
+    bonusPoints = bonusPoints,
+    date = date,
+    bookingReference = bookingReference
 )

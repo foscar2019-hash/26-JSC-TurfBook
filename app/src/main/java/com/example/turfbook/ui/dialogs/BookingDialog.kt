@@ -56,7 +56,8 @@ fun BookingDialog(
         paymentMethod: PaymentMethod,
         transactionId: String,
         selectedAddons: List<String>,
-        notes: String
+        notes: String,
+        referralCode: String
     ) -> Unit
 ) {
     if (!isOpen) return
@@ -77,6 +78,7 @@ fun BookingDialog(
     var captainName by remember { mutableStateOf("") }
     var phone by remember { mutableStateOf("+25263") }
     var email by remember { mutableStateOf("") }
+    var referralCode by remember { mutableStateOf("") }
     var notes by remember { mutableStateOf("") }
 
     var paymentMethod by remember { mutableStateOf(PaymentMethod.ZAAD) }
@@ -457,6 +459,59 @@ fun BookingDialog(
                                             unfocusedBorderColor = StadiumBorder
                                         )
                                     )
+                                    Spacer(modifier = Modifier.height(12.dp))
+
+                                    // Referral Code Box
+                                    Surface(
+                                        color = EmeraldDark.copy(alpha = 0.15f),
+                                        shape = RoundedCornerShape(10.dp),
+                                        border = androidx.compose.foundation.BorderStroke(1.dp, EmeraldPrimary.copy(alpha = 0.4f)),
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Column(modifier = Modifier.padding(12.dp)) {
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.CardGiftcard,
+                                                    contentDescription = null,
+                                                    tint = EmeraldPrimary,
+                                                    modifier = Modifier.size(16.dp)
+                                                )
+                                                Text(
+                                                    text = if (language == Language.SO) "Koodhka Casuumadda Saaxiibka (Optional)" else "Friend Referral Code (Optional)",
+                                                    color = EmeraldPrimary,
+                                                    fontSize = 12.sp,
+                                                    fontWeight = FontWeight.Bold
+                                                )
+                                            }
+                                            Spacer(modifier = Modifier.height(6.dp))
+                                            OutlinedTextField(
+                                                value = referralCode,
+                                                onValueChange = { referralCode = it.uppercase() },
+                                                placeholder = { Text("e.g. JSC-WARRIOR26", color = TextMuted, fontSize = 12.sp) },
+                                                modifier = Modifier.fillMaxWidth(),
+                                                singleLine = true,
+                                                colors = OutlinedTextFieldDefaults.colors(
+                                                    focusedBorderColor = EmeraldPrimary,
+                                                    unfocusedBorderColor = StadiumBorder
+                                                )
+                                            )
+                                            if (referralCode.isNotBlank()) {
+                                                Spacer(modifier = Modifier.height(6.dp))
+                                                Text(
+                                                    text = if (language == Language.SO)
+                                                        "🎉 Koodhka waa sax! Labadiinuba waxaad helaysaan +150 dhibcood markay ballantu dhammaato!"
+                                                    else
+                                                        "🎉 Referral active! Both you & your friend earn +150 bonus loyalty points on completion!",
+                                                    color = AmberGold,
+                                                    fontSize = 11.sp,
+                                                    fontWeight = FontWeight.SemiBold
+                                                )
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -517,11 +572,21 @@ fun BookingDialog(
                                                         modifier = Modifier.size(16.dp)
                                                     )
                                                     Spacer(modifier = Modifier.width(6.dp))
+                                                    val basePts = Booking.calculatePoints(totalPrice)
+                                                    val bonusPts = if (referralCode.isNotBlank()) Booking.REFERRAL_BONUS_POINTS else 0
+                                                    val totalPts = basePts + bonusPts
                                                     Text(
-                                                        text = if (language == Language.SO)
-                                                            "Dhibcaha Daacadda: +${Booking.calculatePoints(totalPrice)} Pts (10 dhibcood $1 kasta)"
-                                                        else
-                                                            "Loyalty Rewards: Earn +${Booking.calculatePoints(totalPrice)} Pts (10 pts per $1)",
+                                                        text = if (language == Language.SO) {
+                                                            if (bonusPts > 0)
+                                                                "Dhibcaha Daacadda: +$totalPts Pts (+$basePts sal + $bonusPts dhiirigelin saaxiib 🎁)"
+                                                            else
+                                                                "Dhibcaha Daacadda: +$basePts Pts (10 dhibcood $1 kasta)"
+                                                        } else {
+                                                            if (bonusPts > 0)
+                                                                "Loyalty Rewards: +$totalPts Pts (+$basePts match + $bonusPts referral bonus 🎁)"
+                                                            else
+                                                                "Loyalty Rewards: Earn +$basePts Pts (10 pts per $1)"
+                                                        },
                                                         color = AmberGold,
                                                         fontWeight = FontWeight.Bold,
                                                         fontSize = 11.sp
@@ -724,7 +789,8 @@ fun BookingDialog(
                                     paymentMethod,
                                     transactionId.trim(),
                                     selectedAddons.toList(),
-                                    notes.trim()
+                                    notes.trim(),
+                                    referralCode.trim()
                                 )
                             }
                         },

@@ -18,6 +18,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.turfbook.data.model.*
+import com.example.turfbook.ui.components.AdminRechartsVisualization
 import com.example.turfbook.ui.dialogs.AdminPinDialog
 import com.example.turfbook.ui.theme.*
 import java.text.SimpleDateFormat
@@ -144,17 +145,17 @@ fun AdminScreen(
         item {
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Card(
                     modifier = Modifier.weight(1f),
                     colors = CardDefaults.cardColors(containerColor = StadiumSurfaceDark),
                     shape = RoundedCornerShape(12.dp)
                 ) {
-                    Column(modifier = Modifier.padding(14.dp)) {
-                        Text("TOTAL REVENUE", color = TextMuted, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                        Text("$${totalRevenue.toInt()}", color = EmeraldPrimary, fontWeight = FontWeight.ExtraBold, fontSize = 20.sp)
-                        Text("Across all bookings", color = TextSecondary, fontSize = 10.sp)
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        Text("TOTAL REVENUE", color = TextMuted, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                        Text("$${totalRevenue.toInt()}", color = EmeraldPrimary, fontWeight = FontWeight.ExtraBold, fontSize = 18.sp)
+                        Text("All confirmed", color = TextSecondary, fontSize = 9.sp)
                     }
                 }
 
@@ -163,13 +164,33 @@ fun AdminScreen(
                     colors = CardDefaults.cardColors(containerColor = StadiumSurfaceDark),
                     shape = RoundedCornerShape(12.dp)
                 ) {
-                    Column(modifier = Modifier.padding(14.dp)) {
-                        Text("CONFIRMED BOOKINGS", color = TextMuted, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                        Text("${bookings.size}", color = AmberGold, fontWeight = FontWeight.ExtraBold, fontSize = 20.sp)
-                        Text("Active reservations", color = TextSecondary, fontSize = 10.sp)
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        Text("BOOKINGS", color = TextMuted, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                        Text("${bookings.size}", color = AmberGold, fontWeight = FontWeight.ExtraBold, fontSize = 18.sp)
+                        Text("Active teams", color = TextSecondary, fontSize = 9.sp)
+                    }
+                }
+
+                Card(
+                    modifier = Modifier.weight(1.1f),
+                    colors = CardDefaults.cardColors(containerColor = StadiumSurfaceDark),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        Text("PRIME PEAK LOAD", color = TextMuted, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                        Text("96% Full", color = Color(0xFFEF4444), fontWeight = FontWeight.ExtraBold, fontSize = 18.sp)
+                        Text("19:00 - 21:00", color = TextSecondary, fontSize = 9.sp)
                     }
                 }
             }
+        }
+
+        // Recharts Data Visualization: Monthly Bookings & Loyalty Points Distribution with Peak Hour Management
+        item {
+            AdminRechartsVisualization(
+                bookings = bookings,
+                language = language
+            )
         }
 
         // Pitch status toggles

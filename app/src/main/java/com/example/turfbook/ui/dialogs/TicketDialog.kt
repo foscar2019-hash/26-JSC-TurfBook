@@ -213,6 +213,26 @@ fun TicketDialog(
                             )
                         }
                     }
+                    if (booking.referralCodeApplied.isNotBlank()) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = if (language == Language.SO) "Dhiirigelin Saaxiib:" else "Referral Bonus:",
+                                color = EmeraldPrimary,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Medium
+                            )
+                            Text(
+                                text = "${booking.referralCodeApplied} (+${booking.referralBonusPoints} pts 🎁)",
+                                color = EmeraldPrimary,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 11.sp
+                            )
+                        }
+                    }
                 }
 
                 Spacer(modifier = Modifier.height(16.dp))

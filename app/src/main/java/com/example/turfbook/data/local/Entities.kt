@@ -46,10 +46,24 @@ data class BookingEntity(
     val merchantNumber: String,
     val totalAmount: Double,
     val loyaltyPoints: Int = 0,
+    val referralCodeApplied: String = "",
+    val referralBonusPoints: Int = 0,
     val addOns: List<String>,
     val notes: String,
     val createdAt: String,
     val smsConfirmed: Boolean
+)
+
+@Entity(tableName = "referrals")
+data class ReferralEntity(
+    @PrimaryKey val id: String,
+    val friendName: String,
+    val friendPhone: String,
+    val referralCode: String,
+    val status: String,
+    val bonusPoints: Int,
+    val date: String,
+    val bookingReference: String
 )
 
 @Entity(tableName = "blocked_slots")

@@ -127,17 +127,213 @@ data class Booking(
     val merchantNumber: String = "445686",
     val totalAmount: Double,
     val loyaltyPoints: Int = 0,
+    val referralCodeApplied: String = "",
+    val referralBonusPoints: Int = 0,
     val addOns: List<String> = emptyList(),
     val notes: String = "",
     val createdAt: String = "",
     val smsConfirmed: Boolean = true
 ) {
     companion object {
+        const val REFERRAL_BONUS_POINTS = 150
+
         fun calculatePoints(amount: Double): Int = (amount * 10).toInt()
 
         fun getTier(points: Int): Pair<String, String> {
             val tier = LoyaltyTier.fromPoints(points)
             return "${tier.badgeIcon} ${tier.title}" to tier.perkEn
+        }
+    }
+}
+
+@Serializable
+data class ReferralInvite(
+    val id: String,
+    val friendName: String,
+    val friendPhone: String,
+    val referralCode: String,
+    val status: String = "COMPLETED", // "COMPLETED", "PENDING"
+    val bonusPoints: Int = 150,
+    val date: String,
+    val bookingReference: String = ""
+)
+
+@Serializable
+enum class PointsTransactionType(val labelEn: String, val labelSo: String) {
+    BOOKING("Pitch Booking", "Ballanta Garoonka"),
+    REFERRAL_BONUS("Referral Bonus", "Gunada Casuumadda"),
+    SPECIAL_EVENT("Special Event", "Munaasabad Gaar ah"),
+    PROMO_BONUS("Promotional Bonus", "Dhibco Dheeraad ah")
+}
+
+@Serializable
+data class LoyaltyPointsRecord(
+    val id: String,
+    val titleEn: String,
+    val titleSo: String,
+    val subtitleEn: String,
+    val subtitleSo: String,
+    val type: PointsTransactionType,
+    val referenceCode: String,
+    val date: String,
+    val time: String = "",
+    val basePoints: Int = 0,
+    val bonusPoints: Int = 0,
+    val totalPoints: Int = basePoints + bonusPoints,
+    val amountSpent: Double? = null,
+    val eventName: String? = null,
+    val referralFriendName: String? = null,
+    val detailEn: String = "",
+    val detailSo: String = ""
+) {
+    companion object {
+        fun buildHistory(
+            bookings: List<Booking>,
+            referrals: List<ReferralInvite>
+        ): List<LoyaltyPointsRecord> {
+            val list = mutableListOf<LoyaltyPointsRecord>()
+
+            // 1. Special Events & Seasonal Tournament Bonuses
+            list.add(
+                LoyaltyPointsRecord(
+                    id = "evt-cup26",
+                    titleEn = "26 June Independence Cup Registration",
+                    titleSo = "Diiwaangelinta Koobka Xorriyadda ee 26 June",
+                    subtitleEn = "Tournament entry bonus awarded to squad captains",
+                    subtitleSo = "Dhibco dheeraad ah oo la siiyay kabtanka tartanka",
+                    type = PointsTransactionType.SPECIAL_EVENT,
+                    referenceCode = "EVT-CUP26",
+                    date = "2026-09-01",
+                    time = "16:00",
+                    basePoints = 0,
+                    bonusPoints = 100,
+                    totalPoints = 100,
+                    eventName = "26 June District Independence Cup 2026",
+                    detailEn = "Registered captain bonus for participating in the official 26 June Independence District Cup.",
+                    detailSo = "Abaalmarinta kabtanka ee ka qaybgalka Tartanka Xorriyadda ee Degmada 26 June."
+                )
+            )
+
+            list.add(
+                LoyaltyPointsRecord(
+                    id = "evt-night75",
+                    titleEn = "Inaugural Floodlight Night Derby Launch",
+                    titleSo = "Furitaanka Iftiinka Casriga ah ee Habeenkii",
+                    subtitleEn = "High-lumen LED floodlights opening promotion",
+                    subtitleSo = "Abaalmarinta furitaanka nalalka casriga ah",
+                    type = PointsTransactionType.SPECIAL_EVENT,
+                    referenceCode = "EVT-NIGHT75",
+                    date = "2026-09-05",
+                    time = "20:00",
+                    basePoints = 0,
+                    bonusPoints = 75,
+                    totalPoints = 75,
+                    eventName = "Night Floodlights Inaugural Celebration",
+                    detailEn = "Special celebration points awarded for supporting the grand opening of high-lumen LED floodlights.",
+                    detailSo = "Abaalmarinta furitaanka laydhadhka cusub ee habeenkii lagu ciyaaro."
+                )
+            )
+
+            // 2. From Pitch Bookings
+            for (b in bookings) {
+                val basePts = Booking.calculatePoints(b.totalAmount)
+                list.add(
+                    LoyaltyPointsRecord(
+                        id = "pt-book-${b.id}",
+                        titleEn = "Booking: ${b.pitchName}",
+                        titleSo = "Ballanta: ${b.pitchName}",
+                        subtitleEn = "${b.teamName} • ${b.startTime} - ${b.endTime} (${b.date})",
+                        subtitleSo = "${b.teamName} • ${b.startTime} - ${b.endTime} (${b.date})",
+                        type = PointsTransactionType.BOOKING,
+                        referenceCode = b.referenceCode,
+                        date = b.date,
+                        time = b.startTime,
+                        basePoints = basePts,
+                        bonusPoints = 0,
+                        totalPoints = basePts,
+                        amountSpent = b.totalAmount,
+                        detailEn = "Earned 10 loyalty points per $1 spent on $${String.format(java.util.Locale.US, "%.2f", b.totalAmount)} total payment.",
+                        detailSo = "Waxaad heshay 10 dhibcood $1 kasta oo aad bixisay qiimaha guud ee $${String.format(java.util.Locale.US, "%.2f", b.totalAmount)}."
+                    )
+                )
+
+                // If referral code applied on booking
+                if (b.referralCodeApplied.isNotBlank() || b.referralBonusPoints > 0) {
+                    val bonus = if (b.referralBonusPoints > 0) b.referralBonusPoints else Booking.REFERRAL_BONUS_POINTS
+                    list.add(
+                        LoyaltyPointsRecord(
+                            id = "pt-ref-book-${b.id}",
+                            titleEn = "Referral Code Bonus (${b.referralCodeApplied.ifBlank { "PROMO" }})",
+                            titleSo = "Gunada Koodhka Casuumadda (${b.referralCodeApplied.ifBlank { "PROMO" }})",
+                            subtitleEn = "Applied referral bonus on #${b.referenceCode}",
+                            subtitleSo = "Dhibco gunno ah oo lagu helay #${b.referenceCode}",
+                            type = PointsTransactionType.REFERRAL_BONUS,
+                            referenceCode = b.referenceCode,
+                            date = b.date,
+                            time = b.startTime,
+                            basePoints = 0,
+                            bonusPoints = bonus,
+                            totalPoints = bonus,
+                            referralFriendName = b.referralCodeApplied,
+                            detailEn = "Bonus awarded for entering referral code '${b.referralCodeApplied}' during booking reservation.",
+                            detailSo = "Dhibco gunno ah oo lagu helay gelinta koodhka '${b.referralCodeApplied}' xilliga ballanta."
+                        )
+                    )
+                }
+
+                // If derby match in notes
+                if (b.notes.contains("derby", ignoreCase = true) || b.notes.contains("tartanka", ignoreCase = true)) {
+                    list.add(
+                        LoyaltyPointsRecord(
+                            id = "pt-event-derby-${b.id}",
+                            titleEn = "Weekend Super Derby Match Bonus",
+                            titleSo = "Abaalmarinta Ciyaarta Adag ee Derby-ga",
+                            subtitleEn = "High-intensity derby clash on #${b.referenceCode}",
+                            subtitleSo = "Kulanka xamaasadda leh ee #${b.referenceCode}",
+                            type = PointsTransactionType.SPECIAL_EVENT,
+                            referenceCode = b.referenceCode,
+                            date = b.date,
+                            time = b.startTime,
+                            basePoints = 0,
+                            bonusPoints = 50,
+                            totalPoints = 50,
+                            eventName = "Weekend Super Derby Clashes",
+                            detailEn = "Awarded +50 bonus points for scheduling a high-tempo weekend derby match fixture.",
+                            detailSo = "Waxaad heshay +50 dhibcood oo dheeraad ah maadaama aad ballansatay kulan derby ah."
+                        )
+                    )
+                }
+            }
+
+            // 3. From Referrals (when friends completed bookings)
+            for (ref in referrals) {
+                if (ref.status == "COMPLETED") {
+                    list.add(
+                        LoyaltyPointsRecord(
+                            id = "pt-ref-invite-${ref.id}",
+                            titleEn = "Friend Referral: ${ref.friendName}",
+                            titleSo = "Casuumadda Saaxiibka: ${ref.friendName}",
+                            subtitleEn = "Friend completed 1st pitch booking (${ref.friendPhone})",
+                            subtitleSo = "Saaxiibku wuxuu dhammaystiray ciyaartii 1-aad (${ref.friendPhone})",
+                            type = PointsTransactionType.REFERRAL_BONUS,
+                            referenceCode = ref.bookingReference.ifBlank { "REF-${ref.referralCode}" },
+                            date = ref.date,
+                            time = "12:00",
+                            basePoints = 0,
+                            bonusPoints = ref.bonusPoints,
+                            totalPoints = ref.bonusPoints,
+                            referralFriendName = ref.friendName,
+                            detailEn = "Earned +${ref.bonusPoints} bonus points because ${ref.friendName} registered with your code and completed their first booking.",
+                            detailSo = "Waxaad heshay +${ref.bonusPoints} dhibcood maadaama ${ref.friendName} uu isticmaalay koodhkaaga oo uu ciyaaray ciyaartiisii ugu horreysay."
+                        )
+                    )
+                }
+            }
+
+            return list.sortedWith(
+                compareByDescending<LoyaltyPointsRecord> { it.date }
+                    .thenByDescending { it.time }
+            )
         }
     }
 }
@@ -230,6 +426,24 @@ data class SimulatedSmsNotification(
     val gateway: String,
     val timestamp: String,
     val status: String = "delivered"
+)
+
+@Serializable
+data class UpcomingBookingReminder(
+    val id: String,
+    val bookingId: String,
+    val bookingReference: String,
+    val pitchName: String,
+    val date: String,
+    val timeSlot: String,
+    val teamName: String,
+    val customerName: String,
+    val customerPhone: String,
+    val hoursUntilMatch: Int = 24,
+    val notificationMessageEn: String,
+    val notificationMessageSo: String,
+    val triggeredAt: String,
+    val isRead: Boolean = false
 )
 
 object AppConfig {

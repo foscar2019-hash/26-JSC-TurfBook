@@ -13,9 +13,10 @@ import androidx.room.TypeConverters
         BlockedSlotEntity::class,
         TeamEntity::class,
         MatchChallengeEntity::class,
-        GalleryImageEntity::class
+        GalleryImageEntity::class,
+        ReferralEntity::class
     ],
-    version = 1,
+    version = 2,
     exportSchema = false
 )
 @TypeConverters(TurfConverters::class)

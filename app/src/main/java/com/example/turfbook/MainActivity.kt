@@ -1,9 +1,14 @@
 package com.example.turfbook
 
+import android.Manifest
+import android.content.Intent
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -12,19 +17,23 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.turfbook.ui.components.SmsNotificationToast
 import com.example.turfbook.ui.components.TurfBottomNav
 import com.example.turfbook.ui.components.TurfTopBar
+import com.example.turfbook.ui.components.UpcomingBookingReminderBanner
 import com.example.turfbook.ui.dialogs.BookingDialog
 import com.example.turfbook.ui.dialogs.ChallengeDialog
+import com.example.turfbook.ui.dialogs.InviteFriendDialog
 import com.example.turfbook.ui.dialogs.RegisterTeamDialog
 import com.example.turfbook.ui.dialogs.TicketDialog
 import com.example.turfbook.ui.screens.*
@@ -44,11 +53,23 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-
+        handleIntent(intent)
         setContent {
             TurfBookTheme {
                 TurfBookApp(viewModel)
             }
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        handleIntent(intent)
+    }
+
+    private fun handleIntent(intent: Intent?) {
+        val targetTab = intent?.getIntExtra("EXTRA_TARGET_TAB", -1) ?: -1
+        if (targetTab >= 0) {
+            viewModel.setTab(targetTab)
         }
     }
 }
@@ -56,6 +77,7 @@ class MainActivity : ComponentActivity() {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TurfBookApp(viewModel: TurfViewModel) {
+    val context = LocalContext.current
     val uiState by viewModel.uiState.collectAsState()
     val pitches by viewModel.pitches.collectAsState()
     val bookings by viewModel.bookings.collectAsState()
@@ -63,6 +85,20 @@ fun TurfBookApp(viewModel: TurfViewModel) {
     val teams by viewModel.teams.collectAsState()
     val challenges by viewModel.challenges.collectAsState()
     val galleryImages by viewModel.galleryImages.collectAsState()
+    val referrals by viewModel.referrals.collectAsState()
+
+    val notificationPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { _ ->
+        viewModel.runDailyUpcomingCheck(context, force = false)
+    }
+
+    LaunchedEffect(Unit) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
+        viewModel.runDailyUpcomingCheck(context, force = false)
+    }
 
     Scaffold(
         topBar = {
@@ -125,9 +161,16 @@ fun TurfBookApp(viewModel: TurfViewModel) {
                 )
                 2 -> MyBookingsScreen(
                     bookings = bookings,
+                    referrals = referrals,
+                    userReferralCode = "JSC-WARRIOR26",
                     language = uiState.language,
                     onViewTicket = { viewModel.openTicket(it) },
-                    onCancelBooking = { viewModel.cancelBooking(it) }
+                    onCancelBooking = { viewModel.cancelBooking(it) },
+                    onOpenInviteFriend = { viewModel.openInviteDialog() },
+                    onRunDailyCheck = { viewModel.runDailyUpcomingCheck(context, force = true) },
+                    onAddTestTomorrowBooking = { viewModel.addTestTomorrowBooking(context) },
+                    lastCheckDate = uiState.lastDailyCheckDate,
+                    isDailyCheckRunning = uiState.isDailyCheckRunning
                 )
                 3 -> TeamsScreen(
                     teams = teams,
@@ -166,12 +209,24 @@ fun TurfBookApp(viewModel: TurfViewModel) {
                 )
             }
 
-            // Top floating simulated SMS banner
-            Box(
+            // Top floating notification banners (Upcoming Match Daily Alert & Simulated SMS)
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .align(Alignment.TopCenter)
             ) {
+                UpcomingBookingReminderBanner(
+                    reminder = uiState.activeUpcomingReminder,
+                    language = uiState.language,
+                    onViewTicket = { bookingId ->
+                        val b = bookings.find { it.id == bookingId }
+                        if (b != null) {
+                            viewModel.openTicket(b)
+                        }
+                    },
+                    onDismiss = { viewModel.dismissUpcomingReminder() }
+                )
+
                 SmsNotificationToast(
                     sms = uiState.activeSms,
                     onDismiss = { viewModel.dismissSmsToast() }
@@ -208,7 +263,7 @@ fun TurfBookApp(viewModel: TurfViewModel) {
         initialSlot = uiState.bookingInitialSlot,
         language = uiState.language,
         onDismiss = { viewModel.closeBooking() },
-        onConfirm = { pitchId, date, slot, durationHours, teamName, captainName, phone, email, paymentMethod, transactionId, selectedAddons, notes ->
+        onConfirm = { pitchId, date, slot, durationHours, teamName, captainName, phone, email, paymentMethod, transactionId, selectedAddons, notes, referralCode ->
             viewModel.createBooking(
                 pitchId = pitchId,
                 date = date,
@@ -221,7 +276,8 @@ fun TurfBookApp(viewModel: TurfViewModel) {
                 paymentMethod = paymentMethod,
                 transactionId = transactionId,
                 selectedAddons = selectedAddons,
-                notes = notes
+                notes = notes,
+                referralCode = referralCode
             )
         }
     )
@@ -231,6 +287,16 @@ fun TurfBookApp(viewModel: TurfViewModel) {
         language = uiState.language,
         onDismiss = { viewModel.closeTicket() },
         onCancelBooking = { viewModel.cancelBooking(it) }
+    )
+
+    InviteFriendDialog(
+        isOpen = uiState.isInviteFriendDialogOpen,
+        userReferralCode = "JSC-WARRIOR26",
+        language = uiState.language,
+        onDismiss = { viewModel.closeInviteDialog() },
+        onSendInvite = { friendName, friendPhone ->
+            viewModel.sendFriendInvite(friendName, friendPhone)
+        }
     )
 
     RegisterTeamDialog(

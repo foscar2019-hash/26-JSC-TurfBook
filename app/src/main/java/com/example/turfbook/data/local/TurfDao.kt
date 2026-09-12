@@ -80,4 +80,14 @@ interface TurfDao {
 
     @Query("UPDATE gallery_images SET likes = likes + 1 WHERE id = :imageId")
     suspend fun incrementLikes(imageId: String)
+
+    // Referrals
+    @Query("SELECT * FROM referrals ORDER BY date DESC")
+    fun getAllReferrals(): Flow<List<ReferralEntity>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertReferral(referral: ReferralEntity)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertReferrals(referrals: List<ReferralEntity>)
 }
