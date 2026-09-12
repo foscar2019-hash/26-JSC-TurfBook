@@ -189,6 +189,30 @@ fun TicketDialog(
                         Text("Total Amount Paid:", color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 13.sp)
                         Text("$${booking.totalAmount.toInt()}", color = EmeraldPrimary, fontWeight = FontWeight.ExtraBold, fontSize = 16.sp)
                     }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = if (language == Language.SO) "Dhibcaha Daacadda:" else "Loyalty Points Earned:",
+                            color = AmberGold,
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 12.sp
+                        )
+                        Surface(
+                            color = AmberGold.copy(alpha = 0.2f),
+                            shape = RoundedCornerShape(6.dp)
+                        ) {
+                            Text(
+                                text = "+${if (booking.loyaltyPoints > 0) booking.loyaltyPoints else Booking.calculatePoints(booking.totalAmount)} PTS",
+                                color = AmberGold,
+                                fontWeight = FontWeight.ExtraBold,
+                                fontSize = 11.sp,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
+                    }
                 }
 
                 Spacer(modifier = Modifier.height(16.dp))

@@ -61,6 +61,53 @@ data class AddOnItem(
 )
 
 @Serializable
+enum class LoyaltyTier(
+    val title: String,
+    val somaliTitle: String,
+    val badgeIcon: String,
+    val minPoints: Int,
+    val discountPercent: Int,
+    val perkEn: String,
+    val perkSo: String
+) {
+    BRONZE(
+        title = "Bronze",
+        somaliTitle = "Bronze (Naxaas)",
+        badgeIcon = "🥉",
+        minPoints = 0,
+        discountPercent = 0,
+        perkEn = "Earn 10 points per $1 spent • Standard pitch access",
+        perkSo = "Hel 10 dhibcood $1 kasta oo aad bixiso"
+    ),
+    SILVER(
+        title = "Silver",
+        somaliTitle = "Silver (Qalin)",
+        badgeIcon = "🥈",
+        minPoints = 500,
+        discountPercent = 5,
+        perkEn = "5% off all pitch hire • Free team bibs set per booking",
+        perkSo = "5% qiimo dhimis garoonka • Lebiska kooxda oo bilaash ah"
+    ),
+    GOLD(
+        title = "Gold",
+        somaliTitle = "Gold (Dahab)",
+        badgeIcon = "🥇",
+        minPoints = 1000,
+        discountPercent = 10,
+        perkEn = "10% off pitch hire • Free match ball & VIP lounge priority",
+        perkSo = "10% qiimo dhimis • Kubad ciyaareed bilaash ah & VIP Lounge"
+    );
+
+    companion object {
+        fun fromPoints(points: Int): LoyaltyTier = when {
+            points >= 1000 -> GOLD
+            points >= 500 -> SILVER
+            else -> BRONZE
+        }
+    }
+}
+
+@Serializable
 data class Booking(
     val id: String,
     val referenceCode: String,
@@ -79,11 +126,21 @@ data class Booking(
     val transactionId: String = "",
     val merchantNumber: String = "445686",
     val totalAmount: Double,
+    val loyaltyPoints: Int = 0,
     val addOns: List<String> = emptyList(),
     val notes: String = "",
     val createdAt: String = "",
     val smsConfirmed: Boolean = true
-)
+) {
+    companion object {
+        fun calculatePoints(amount: Double): Int = (amount * 10).toInt()
+
+        fun getTier(points: Int): Pair<String, String> {
+            val tier = LoyaltyTier.fromPoints(points)
+            return "${tier.badgeIcon} ${tier.title}" to tier.perkEn
+        }
+    }
+}
 
 @Serializable
 data class BlockedSlot(

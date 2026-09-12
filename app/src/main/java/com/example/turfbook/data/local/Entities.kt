@@ -45,6 +45,7 @@ data class BookingEntity(
     val transactionId: String,
     val merchantNumber: String,
     val totalAmount: Double,
+    val loyaltyPoints: Int = 0,
     val addOns: List<String>,
     val notes: String,
     val createdAt: String,

@@ -220,6 +220,7 @@ class TurfViewModel(private val repository: TurfRepository) : ViewModel() {
                 transactionId = transactionId.ifBlank { "TID-${Random.nextInt(100000, 999999)}" },
                 merchantNumber = paymentMethod.merchant,
                 totalAmount = total,
+                loyaltyPoints = Booking.calculatePoints(total),
                 addOns = selectedAddons,
                 notes = notes,
                 createdAt = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(Date()),
@@ -232,10 +233,11 @@ class TurfViewModel(private val repository: TurfRepository) : ViewModel() {
 
             // Trigger simulated SMS delivery
             val isTelesom = phone.startsWith("+25263") || phone.startsWith("063") || paymentMethod == PaymentMethod.ZAAD
+            val pointsEarned = booking.loyaltyPoints
             val smsText = if (_uiState.value.language == Language.SO) {
-                "26 JSC TurfBook: Ballantaadu waa la xaqiijiyey! Tixraaca: #$ref. Kooxda: $teamName. Garoonka: ${pitch.somaliName}. Taariikhda: $date ($slot). Front Desk: ${AppConfig.CONTACT_PHONE}."
+                "26 JSC TurfBook: Ballantaadu waa la xaqiijiyey! Tixraaca: #$ref. Kooxda: $teamName. Garoonka: ${pitch.somaliName}. Taariikhda: $date ($slot). Dhibco Loyalty: +$pointsEarned pts. Front Desk: ${AppConfig.CONTACT_PHONE}."
             } else {
-                "26 JSC TurfBook: Booking confirmed! Ref: #$ref. Team: $teamName. Pitch: ${pitch.name}. Date: $date ($slot). Total: $$total. Front Desk: ${AppConfig.CONTACT_PHONE}."
+                "26 JSC TurfBook: Booking confirmed! Ref: #$ref. Team: $teamName. Pitch: ${pitch.name}. Date: $date ($slot). Total: $$total (+${pointsEarned} loyalty pts). Front Desk: ${AppConfig.CONTACT_PHONE}."
             }
 
             _uiState.value = _uiState.value.copy(

@@ -499,6 +499,35 @@ fun BookingDialog(
                                                 color = TextSecondary,
                                                 fontSize = 12.sp
                                             )
+                                            Spacer(modifier = Modifier.height(8.dp))
+                                            Surface(
+                                                color = AmberGold.copy(alpha = 0.15f),
+                                                shape = RoundedCornerShape(8.dp),
+                                                border = androidx.compose.foundation.BorderStroke(1.dp, AmberGold.copy(alpha = 0.4f)),
+                                                modifier = Modifier.fillMaxWidth()
+                                            ) {
+                                                Row(
+                                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                                    verticalAlignment = Alignment.CenterVertically
+                                                ) {
+                                                    Icon(
+                                                        imageVector = Icons.Default.Stars,
+                                                        contentDescription = null,
+                                                        tint = AmberGold,
+                                                        modifier = Modifier.size(16.dp)
+                                                    )
+                                                    Spacer(modifier = Modifier.width(6.dp))
+                                                    Text(
+                                                        text = if (language == Language.SO)
+                                                            "Dhibcaha Daacadda: +${Booking.calculatePoints(totalPrice)} Pts (10 dhibcood $1 kasta)"
+                                                        else
+                                                            "Loyalty Rewards: Earn +${Booking.calculatePoints(totalPrice)} Pts (10 pts per $1)",
+                                                        color = AmberGold,
+                                                        fontWeight = FontWeight.Bold,
+                                                        fontSize = 11.sp
+                                                    )
+                                                }
+                                            }
                                         }
                                     }
                                 }
