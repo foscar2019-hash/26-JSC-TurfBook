@@ -325,4 +325,228 @@ class TurfBookUnitTest {
         assertTrue(tomorrowBookings.isNotEmpty())
         assertEquals("26 June Warriors FC", tomorrowBookings[0].teamName)
     }
+
+    @Test
+    fun testBookingTimePassedEvaluation() {
+        // Date far in the past
+        assertTrue(BookingTimeHelper.isBookingTimePassed("2020-01-01", "10:00"))
+
+        // Date far in the future
+        assertFalse(BookingTimeHelper.isBookingTimePassed("2030-01-01", "18:00"))
+
+        // Current date past vs future hours
+        val cal = java.util.Calendar.getInstance()
+        val todayStr = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault()).format(cal.time)
+
+        // 00:00 today should be passed unless test runs exactly at midnight
+        val currentHour = cal.get(java.util.Calendar.HOUR_OF_DAY)
+        if (currentHour > 1) {
+            assertTrue(BookingTimeHelper.isBookingTimePassed(todayStr, "01:00"))
+        }
+        // 23:59 today is not passed unless test runs at 23:59
+        if (currentHour < 23) {
+            assertFalse(BookingTimeHelper.isBookingTimePassed(todayStr, "23:59"))
+        }
+    }
+
+    @Test
+    fun testPitchRatingSummaryCalculation() {
+        val reviews = listOf(
+            PitchReview(
+                id = "rev-1",
+                bookingId = "b-1",
+                pitchId = "pitch-1",
+                customerName = "Axmed Cali",
+                teamName = "Warriors",
+                rating = 5,
+                comment = "Excellent grass quality!",
+                date = "2026-09-10"
+            ),
+            PitchReview(
+                id = "rev-2",
+                bookingId = "b-2",
+                pitchId = "pitch-1",
+                customerName = "Jaamac",
+                teamName = "Strikers",
+                rating = 4,
+                comment = "Good lighting.",
+                date = "2026-09-11"
+            ),
+            PitchReview(
+                id = "rev-3",
+                bookingId = "b-3",
+                pitchId = "pitch-2",
+                customerName = "Khadar",
+                teamName = "Tigers",
+                rating = 3,
+                comment = "Decent pitch.",
+                date = "2026-09-11"
+            )
+        )
+
+        val pitch1Summary = BookingTimeHelper.calculatePitchRating(reviews, "pitch-1")
+        assertEquals(2, pitch1Summary.reviewCount)
+        assertEquals(4.5, pitch1Summary.averageRating, 0.001)
+
+        val pitch2Summary = BookingTimeHelper.calculatePitchRating(reviews, "pitch-2")
+        assertEquals(1, pitch2Summary.reviewCount)
+        assertEquals(3.0, pitch2Summary.averageRating, 0.001)
+
+        val pitch3Summary = BookingTimeHelper.calculatePitchRating(reviews, "pitch-3")
+        assertEquals(0, pitch3Summary.reviewCount)
+        assertEquals(0.0, pitch3Summary.averageRating, 0.001)
+
+        val overallSummary = BookingTimeHelper.calculateOverallRating(reviews)
+        assertEquals(3, overallSummary.reviewCount)
+        // (5 + 4 + 3) / 3 = 4.0
+        assertEquals(4.0, overallSummary.averageRating, 0.001)
+    }
+
+    @Test
+    fun testWaitlistEntryModelCreation() {
+        val entry = WaitlistEntry(
+            id = "wl-test-1",
+            pitchId = "pitch-1",
+            pitchName = "Pitch 1 - Championship Arena",
+            date = "2026-09-13",
+            slot = "19:00 - 20:00",
+            customerName = "Mustafe Cabdi",
+            customerPhone = "+252634123456",
+            teamName = "Red Sea Tigers FC",
+            notes = "Ready on 15 mins notice",
+            status = "WAITING",
+            createdAt = 1757780000000L,
+            createdTimeStr = "Today, 17:15"
+        )
+
+        assertEquals("wl-test-1", entry.id)
+        assertEquals("pitch-1", entry.pitchId)
+        assertEquals("19:00 - 20:00", entry.slot)
+        assertEquals("Red Sea Tigers FC", entry.teamName)
+        assertEquals("WAITING", entry.status)
+        assertEquals("+252634123456", entry.customerPhone)
+    }
+
+    @Test
+    fun testWaitlistGroupingByTimeBlock() {
+        val entries = listOf(
+            WaitlistEntry(
+                id = "wl-1",
+                pitchId = "pitch-1",
+                pitchName = "Pitch 1",
+                date = "2026-09-13",
+                slot = "19:00 - 20:00",
+                customerName = "Player A",
+                customerPhone = "+252631111111",
+                teamName = "Team A",
+                status = "WAITING"
+            ),
+            WaitlistEntry(
+                id = "wl-2",
+                pitchId = "pitch-1",
+                pitchName = "Pitch 1",
+                date = "2026-09-13",
+                slot = "19:00 - 20:00",
+                customerName = "Player B",
+                customerPhone = "+252632222222",
+                teamName = "Team B",
+                status = "WAITING"
+            ),
+            WaitlistEntry(
+                id = "wl-3",
+                pitchId = "pitch-2",
+                pitchName = "Pitch 2",
+                date = "2026-09-13",
+                slot = "20:00 - 21:00",
+                customerName = "Player C",
+                customerPhone = "+252633333333",
+                teamName = "Team C",
+                status = "NOTIFIED"
+            )
+        )
+
+        val grouped = entries.groupBy { "${it.pitchId}__${it.date}__${it.slot}" }
+        assertEquals(2, grouped.size)
+
+        val block1 = grouped["pitch-1__2026-09-13__19:00 - 20:00"]!!
+        assertEquals(2, block1.size)
+        assertEquals("Team A", block1[0].teamName)
+        assertEquals("Team B", block1[1].teamName)
+
+        val block2 = grouped["pitch-2__2026-09-13__20:00 - 21:00"]!!
+        assertEquals(1, block2.size)
+        assertEquals("Team C", block2[0].teamName)
+        assertEquals("NOTIFIED", block2[0].status)
+    }
+
+    @Test
+    fun testInitialWaitlistEntries() {
+        val initialWaitlist = com.example.turfbook.data.repository.TurfRepository.getInitialWaitlistEntries()
+        assertTrue(initialWaitlist.isNotEmpty())
+        assertTrue(initialWaitlist.any { it.pitchId == "pitch-1" })
+        assertTrue(initialWaitlist.any { it.slot == "19:00 - 20:00" })
+    }
+
+    @Test
+    fun testQuickAccessLinkGeneration() {
+        val bookingId = "b-test-2h-123"
+        val deepLink = BookingTimeHelper.generateQuickAccessDeepLink(bookingId)
+        val webUrl = BookingTimeHelper.generateQuickAccessWebUrl(bookingId)
+
+        assertEquals("turfbook://ticket?bookingId=b-test-2h-123", deepLink)
+        assertEquals("https://turfbook.jsc.so/ticket?id=b-test-2h-123", webUrl)
+        assertTrue(deepLink.contains(bookingId))
+        assertTrue(webUrl.contains(bookingId))
+    }
+
+    @Test
+    fun testTwoHourReminderModelCreation() {
+        val reminder = TwoHourBookingReminder(
+            id = "rem-test-1",
+            bookingId = "b-1",
+            bookingReference = "JSC-1001",
+            pitchName = "Pitch 1 - Championship Arena",
+            date = "2026-09-13",
+            startTime = "18:00",
+            customerName = "Guled Warsame",
+            customerEmail = "guled.w@gmail.com",
+            customerPhone = "+252634455667",
+            teamName = "Red Sea FC",
+            quickAccessDeepLink = BookingTimeHelper.generateQuickAccessDeepLink("b-1"),
+            quickAccessWebUrl = BookingTimeHelper.generateQuickAccessWebUrl("b-1"),
+            dispatchedAt = System.currentTimeMillis()
+        )
+
+        assertEquals("rem-test-1", reminder.id)
+        assertEquals("b-1", reminder.bookingId)
+        assertEquals("JSC-1001", reminder.bookingReference)
+        assertEquals("guled.w@gmail.com", reminder.customerEmail)
+        assertEquals("turfbook://ticket?bookingId=b-1", reminder.quickAccessDeepLink)
+        assertTrue(reminder.quickAccessWebUrl.startsWith("https://turfbook.jsc.so/ticket"))
+    }
+
+    @Test
+    fun testTwoHourWindowCalculation() {
+        // Today's date with a slot exactly 2 hours from now
+        val now = java.util.Calendar.getInstance()
+        val matchCal = (now.clone() as java.util.Calendar).apply {
+            add(java.util.Calendar.MINUTE, 115) // ~2 hours away (within 30..150 min window)
+        }
+        val dateStr = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault()).format(matchCal.time)
+        val timeStr = java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault()).format(matchCal.time)
+
+        val minutes = BookingTimeHelper.getMinutesUntilMatch(dateStr, timeStr)
+        assertTrue(minutes in 110..120)
+        assertTrue(BookingTimeHelper.isWithinTwoHourWindow(dateStr, timeStr))
+
+        // Match that is 5 hours away should NOT be in 2-hour window
+        val farCal = (now.clone() as java.util.Calendar).apply {
+            add(java.util.Calendar.MINUTE, 300)
+        }
+        val farDate = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault()).format(farCal.time)
+        val farTime = java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault()).format(farCal.time)
+        assertFalse(BookingTimeHelper.isWithinTwoHourWindow(farDate, farTime))
+    }
 }
+
+

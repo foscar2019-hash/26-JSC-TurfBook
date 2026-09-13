@@ -125,3 +125,33 @@ data class GalleryImageEntity(
     val teamsInvolved: String,
     val likes: Int
 )
+
+@Entity(tableName = "pitch_reviews")
+data class PitchReviewEntity(
+    @PrimaryKey val id: String,
+    val bookingId: String,
+    val pitchId: String,
+    val pitchName: String,
+    val customerName: String,
+    val teamName: String,
+    val rating: Int,
+    val comment: String,
+    val date: String,
+    val tags: List<String>
+)
+
+@Entity(tableName = "waitlist_entries")
+data class WaitlistEntryEntity(
+    @PrimaryKey val id: String,
+    val pitchId: String,
+    val pitchName: String,
+    val date: String,
+    val slot: String,
+    val customerName: String,
+    val customerPhone: String,
+    val teamName: String,
+    val notes: String,
+    val status: String,
+    val createdAt: Long,
+    val createdTimeStr: String
+)

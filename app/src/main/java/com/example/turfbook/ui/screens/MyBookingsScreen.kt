@@ -25,6 +25,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.turfbook.data.model.*
+import com.example.turfbook.ui.components.LoyaltyLeaderboardSection
 import com.example.turfbook.ui.dialogs.PointsDetailDialog
 import com.example.turfbook.ui.theme.*
 import java.net.URLEncoder
@@ -36,6 +37,8 @@ import java.util.Locale
 @Composable
 fun MyBookingsScreen(
     bookings: List<Booking>,
+    registeredTeams: List<Team> = emptyList(),
+    reviews: List<PitchReview> = emptyList(),
     referrals: List<ReferralInvite> = emptyList(),
     userReferralCode: String = "JSC-WARRIOR26",
     language: Language,
@@ -45,7 +48,15 @@ fun MyBookingsScreen(
     onRunDailyCheck: () -> Unit = {},
     onAddTestTomorrowBooking: () -> Unit = {},
     lastCheckDate: String? = null,
-    isDailyCheckRunning: Boolean = false
+    isDailyCheckRunning: Boolean = false,
+    onRateBooking: (Booking) -> Unit = {},
+    onRunTwoHourCheck: () -> Unit = {},
+    onAddTestTwoHourBooking: () -> Unit = {},
+    onTriggerBookingReminder: (Booking) -> Unit = {},
+    onOpenEmailPreview: (TwoHourBookingReminder) -> Unit = {},
+    dispatchedReminders: List<TwoHourBookingReminder> = emptyList(),
+    isTwoHourScannerRunning: Boolean = false,
+    onNavigateToBook: () -> Unit = {}
 ) {
     val context = LocalContext.current
     var selectedSubTab by remember { mutableIntStateOf(0) } // 0: Bookings, 1: Points History
@@ -689,24 +700,52 @@ fun MyBookingsScreen(
                                 imageVector = Icons.Default.ConfirmationNumber,
                                 contentDescription = null,
                                 tint = if (selectedSubTab == 0) StadiumBgDark else TextSecondary,
-                                modifier = Modifier.size(15.dp)
+                                modifier = Modifier.size(13.dp)
                             )
-                            Spacer(modifier = Modifier.width(6.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
                             Text(
                                 text = if (language == Language.SO) "Ballamaha (${bookings.size})" else "Bookings (${bookings.size})",
                                 color = if (selectedSubTab == 0) StadiumBgDark else TextPrimary,
                                 fontWeight = FontWeight.Bold,
-                                fontSize = 12.sp
+                                fontSize = 11.sp
                             )
                         }
                     }
 
-                    // Subtab 1: Points History Ledger
+                    // Subtab 1: Loyalty Leaderboard (Top 5)
                     Surface(
                         onClick = { selectedSubTab = 1 },
                         color = if (selectedSubTab == 1) AmberGold else Color.Transparent,
                         shape = RoundedCornerShape(9.dp),
-                        modifier = Modifier.weight(1.3f)
+                        modifier = Modifier.weight(1.15f)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(vertical = 9.dp),
+                            horizontalArrangement = Arrangement.Center,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.EmojiEvents,
+                                contentDescription = null,
+                                tint = if (selectedSubTab == 1) StadiumBgDark else AmberGold,
+                                modifier = Modifier.size(14.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = if (language == Language.SO) "Horyaalka 🏆" else "Leaderboard 🏆",
+                                color = if (selectedSubTab == 1) StadiumBgDark else TextPrimary,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 11.sp
+                            )
+                        }
+                    }
+
+                    // Subtab 2: Points History Ledger
+                    Surface(
+                        onClick = { selectedSubTab = 2 },
+                        color = if (selectedSubTab == 2) Color(0xFF38BDF8) else Color.Transparent,
+                        shape = RoundedCornerShape(9.dp),
+                        modifier = Modifier.weight(1.1f)
                     ) {
                         Row(
                             modifier = Modifier.padding(vertical = 9.dp),
@@ -716,15 +755,15 @@ fun MyBookingsScreen(
                             Icon(
                                 imageVector = Icons.Default.Stars,
                                 contentDescription = null,
-                                tint = if (selectedSubTab == 1) StadiumBgDark else AmberGold,
-                                modifier = Modifier.size(16.dp)
+                                tint = if (selectedSubTab == 2) StadiumBgDark else Color(0xFF38BDF8),
+                                modifier = Modifier.size(14.dp)
                             )
-                            Spacer(modifier = Modifier.width(6.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
                             Text(
-                                text = if (language == Language.SO) "Dhibcaha & Gunnooyinka (${historyRecords.size})" else "Points History (${historyRecords.size})",
-                                color = if (selectedSubTab == 1) StadiumBgDark else TextPrimary,
+                                text = if (language == Language.SO) "Dhibcaha (${historyRecords.size})" else "Points (${historyRecords.size})",
+                                color = if (selectedSubTab == 2) StadiumBgDark else TextPrimary,
                                 fontWeight = FontWeight.Bold,
-                                fontSize = 12.sp
+                                fontSize = 11.sp
                             )
                         }
                     }
@@ -733,6 +772,210 @@ fun MyBookingsScreen(
         }
 
         if (selectedSubTab == 0) {
+            // ================= AUTOMATED 2-HOUR KICK-OFF REMINDER & QUICK ACCESS ENGINE =================
+            item {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .border(
+                            width = 1.2.dp,
+                            color = EmeraldPrimary.copy(alpha = 0.8f),
+                            shape = RoundedCornerShape(12.dp)
+                        )
+                        .testTag("two_hour_reminder_section"),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFF0D1E16)),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Surface(
+                                    color = EmeraldPrimary.copy(alpha = 0.2f),
+                                    shape = RoundedCornerShape(6.dp),
+                                    border = BorderStroke(0.8.dp, EmeraldPrimary.copy(alpha = 0.5f))
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.ElectricBolt,
+                                        contentDescription = null,
+                                        tint = EmeraldPrimary,
+                                        modifier = Modifier
+                                            .padding(5.dp)
+                                            .size(16.dp)
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Column {
+                                    Text(
+                                        text = if (language == Language.SO) "Ogaysiiska 2 Saac Ka Hor & Tigidhka Degdegga ah" else "Automated 2-Hour Kick-off Reminder",
+                                        color = Color.White,
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Text(
+                                        text = if (language == Language.SO) "Email & ogaysiis wata xidhiidh degdeg ah (Quick Access)" else "Emails & notifies customers 2h prior with 1-tap ticket link",
+                                        color = EmeraldPrimary,
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                }
+                            }
+
+                            Surface(
+                                color = EmeraldDark.copy(alpha = 0.4f),
+                                shape = RoundedCornerShape(6.dp),
+                                border = BorderStroke(0.8.dp, EmeraldPrimary.copy(alpha = 0.6f))
+                            ) {
+                                Text(
+                                    text = if (dispatchedReminders.isNotEmpty()) "${dispatchedReminders.size} SENT" else "AUTOMATED",
+                                    color = EmeraldPrimary,
+                                    fontSize = 9.sp,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        Text(
+                            text = if (language == Language.SO)
+                                "Mashiinka otomaatiga ah wuxuu 2 saac ka hor waqtiga ciyaarta kuu soo dirayaa email iyo ogaysiis degdeg ah oo wata xidhiidh (Quick Access link) si aad toos ugu gasho garoonka adigoon raadin tigidhadada."
+                            else
+                                "TurfBook automatically dispatches an email voucher and push notification exactly 2 hours before your match, featuring a 1-tap 'Quick Access' deep link straight to your digital match ticket.",
+                            color = TextSecondary,
+                            fontSize = 11.sp,
+                            lineHeight = 15.sp
+                        )
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        // Actions: Simulate 2h kick-off & Run Scanner
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Button(
+                                onClick = onAddTestTwoHourBooking,
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(34.dp)
+                                    .testTag("simulate_two_hour_booking_button"),
+                                shape = RoundedCornerShape(8.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = EmeraldPrimary),
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
+                            ) {
+                                Icon(Icons.Default.ElectricBolt, contentDescription = null, modifier = Modifier.size(13.dp), tint = StadiumBgDark)
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = if (language == Language.SO) "⚡ Tijaabi 2h Kulankooda" else "⚡ Simulate 2H Kick-off",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = StadiumBgDark
+                                )
+                            }
+
+                            OutlinedButton(
+                                onClick = onRunTwoHourCheck,
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(34.dp)
+                                    .testTag("run_two_hour_check_button"),
+                                shape = RoundedCornerShape(8.dp),
+                                border = BorderStroke(0.8.dp, StadiumBorder),
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
+                                enabled = !isTwoHourScannerRunning
+                            ) {
+                                Icon(Icons.Default.Sync, contentDescription = null, modifier = Modifier.size(13.dp), tint = AmberGold)
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = if (isTwoHourScannerRunning) "Scanning..." else if (language == Language.SO) "Baadh 2h Hadda" else "Scan 2H Window",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            }
+                        }
+
+                        // If dispatched reminders exist, show quick preview
+                        if (dispatchedReminders.isNotEmpty()) {
+                            Spacer(modifier = Modifier.height(10.dp))
+                            HorizontalDivider(color = StadiumBorder, thickness = 0.5.dp)
+                            Spacer(modifier = Modifier.height(6.dp))
+
+                            Text(
+                                text = if (language == Language.SO) "Ogaysiisyadii Ugu Dambeeyay Ee La Diray:" else "Latest Dispatched 2-Hour Reminders:",
+                                color = AmberGold,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+
+                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                dispatchedReminders.take(2).forEach { r ->
+                                    Surface(
+                                        color = StadiumCardSurface,
+                                        shape = RoundedCornerShape(6.dp),
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(horizontal = 8.dp, vertical = 6.dp),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Column(modifier = Modifier.weight(1f)) {
+                                                Text(
+                                                    text = "⚽ ${r.teamName} @ ${r.pitchName} (🕒 ${r.startTime})",
+                                                    color = Color.White,
+                                                    fontSize = 11.sp,
+                                                    fontWeight = FontWeight.Bold
+                                                )
+                                                Text(
+                                                    text = "To: ${r.customerEmail} • Link: ${r.quickAccessDeepLink}",
+                                                    color = TextMuted,
+                                                    fontSize = 9.sp,
+                                                    maxLines = 1
+                                                )
+                                            }
+                                            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                                OutlinedButton(
+                                                    onClick = { onOpenEmailPreview(r) },
+                                                    shape = RoundedCornerShape(4.dp),
+                                                    modifier = Modifier.height(26.dp),
+                                                    contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp)
+                                                ) {
+                                                    Icon(Icons.Default.Mail, contentDescription = null, tint = AmberGold, modifier = Modifier.size(11.dp))
+                                                    Spacer(modifier = Modifier.width(2.dp))
+                                                    Text("Email", color = Color.White, fontSize = 9.sp)
+                                                }
+
+                                                Button(
+                                                    onClick = {
+                                                        val b = bookings.find { it.id == r.bookingId }
+                                                        if (b != null) onViewTicket(b)
+                                                    },
+                                                    shape = RoundedCornerShape(4.dp),
+                                                    colors = ButtonDefaults.buttonColors(containerColor = EmeraldPrimary),
+                                                    modifier = Modifier.height(26.dp),
+                                                    contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp)
+                                                ) {
+                                                    Text("Ticket", color = StadiumBgDark, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
             // ================= DAILY CHECK & UPCOMING MATCH ALERT CARD =================
             item {
                 val cal = remember { Calendar.getInstance().apply { add(Calendar.DAY_OF_YEAR, 1) } }
@@ -900,6 +1143,16 @@ fun MyBookingsScreen(
                         }
                     }
                 }
+            }
+
+            // ================= LOYALTY LEADERBOARD (TOP 5 SQUADS) =================
+            item {
+                LoyaltyLeaderboardSection(
+                    bookings = bookings,
+                    registeredTeams = registeredTeams,
+                    language = language,
+                    onBookMatchClick = onNavigateToBook
+                )
             }
 
             // ================= SUBTAB 0: CONFIRMED BOOKINGS =================
@@ -1108,6 +1361,17 @@ fun MyBookingsScreen(
                                 }
 
                                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    // 2-Hour Kick-off Reminder & Quick Access Email trigger
+                                    IconButton(
+                                        onClick = { onTriggerBookingReminder(b) },
+                                        modifier = Modifier
+                                            .size(32.dp)
+                                            .clip(RoundedCornerShape(6.dp))
+                                            .background(AmberGold.copy(alpha = 0.18f))
+                                    ) {
+                                        Icon(Icons.Default.ElectricBolt, contentDescription = "2h Reminder & Email", tint = AmberGold, modifier = Modifier.size(16.dp))
+                                    }
+
                                     // WhatsApp Share
                                     IconButton(
                                         onClick = {
@@ -1139,6 +1403,81 @@ fun MyBookingsScreen(
                                         Icon(Icons.Default.ConfirmationNumber, contentDescription = null, modifier = Modifier.size(14.dp))
                                         Spacer(modifier = Modifier.width(4.dp))
                                         Text(if (language == Language.SO) "Tixraaca" else "Ticket", fontSize = 11.sp)
+                                    }
+                                }
+                            }
+
+                            // Post-Match Pitch Rating & Comment CTA
+                            val isPassed = BookingTimeHelper.isBookingTimePassed(b.date, b.endTime)
+                            val existingRev = reviews.find { it.bookingId == b.id }
+
+                            if (isPassed) {
+                                Spacer(modifier = Modifier.height(10.dp))
+                                if (existingRev != null) {
+                                    Surface(
+                                        color = StadiumCardSurface,
+                                        shape = RoundedCornerShape(8.dp),
+                                        border = BorderStroke(1.dp, AmberGold.copy(alpha = 0.4f)),
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clickable { onRateBooking(b) }
+                                            .testTag("booking_review_${b.id}")
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Row(
+                                                modifier = Modifier.weight(1f),
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Row {
+                                                    repeat(5) { i ->
+                                                        Icon(
+                                                            imageVector = if (i < existingRev.rating) Icons.Default.Star else Icons.Default.StarBorder,
+                                                            contentDescription = null,
+                                                            tint = if (i < existingRev.rating) AmberGold else TextMuted,
+                                                            modifier = Modifier.size(13.dp)
+                                                        )
+                                                    }
+                                                }
+                                                Spacer(modifier = Modifier.width(6.dp))
+                                                Text(
+                                                    text = if (existingRev.comment.isNotBlank()) "\"${existingRev.comment}\"" else "Rated ${existingRev.rating}/5 ⭐",
+                                                    color = Color.White,
+                                                    fontSize = 11.sp,
+                                                    maxLines = 1
+                                                )
+                                            }
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                            Text(
+                                                text = if (language == Language.SO) "Wax ka beddel" else "Edit",
+                                                color = AmberGold,
+                                                fontSize = 11.sp,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        }
+                                    }
+                                } else {
+                                    Button(
+                                        onClick = { onRateBooking(b) },
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(36.dp)
+                                            .testTag("rate_pitch_btn_${b.id}"),
+                                        colors = ButtonDefaults.buttonColors(containerColor = AmberGold),
+                                        shape = RoundedCornerShape(8.dp),
+                                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp)
+                                    ) {
+                                        Icon(Icons.Default.Star, contentDescription = null, tint = Color.Black, modifier = Modifier.size(15.dp))
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text(
+                                            text = if (language == Language.SO) "⭐ Qiimee Garoonka (Leave Review)" else "⭐ Rate Pitch & Leave Review",
+                                            color = Color.Black,
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 11.sp
+                                        )
                                     }
                                 }
                             }

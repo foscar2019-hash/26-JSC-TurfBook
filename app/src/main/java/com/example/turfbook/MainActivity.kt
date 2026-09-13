@@ -30,10 +30,15 @@ import androidx.compose.ui.unit.sp
 import com.example.turfbook.ui.components.SmsNotificationToast
 import com.example.turfbook.ui.components.TurfBottomNav
 import com.example.turfbook.ui.components.TurfTopBar
+import com.example.turfbook.ui.components.TwoHourBookingReminderBanner
 import com.example.turfbook.ui.components.UpcomingBookingReminderBanner
 import com.example.turfbook.ui.dialogs.BookingDialog
 import com.example.turfbook.ui.dialogs.ChallengeDialog
+import com.example.turfbook.ui.dialogs.EmailReminderPreviewDialog
 import com.example.turfbook.ui.dialogs.InviteFriendDialog
+import com.example.turfbook.ui.dialogs.JoinWaitlistDialog
+import com.example.turfbook.ui.dialogs.PitchReviewsDialog
+import com.example.turfbook.ui.dialogs.RatePitchDialog
 import com.example.turfbook.ui.dialogs.RegisterTeamDialog
 import com.example.turfbook.ui.dialogs.TicketDialog
 import com.example.turfbook.ui.screens.*
@@ -71,6 +76,22 @@ class MainActivity : ComponentActivity() {
         if (targetTab >= 0) {
             viewModel.setTab(targetTab)
         }
+
+        // Direct Quick Access to digital ticket via Intent extra or deep link Uri
+        val extraBookingId = intent?.getStringExtra("EXTRA_QUICK_ACCESS_BOOKING_ID")
+            ?: intent?.getStringExtra("EXTRA_BOOKING_ID")
+
+        val deepLinkBookingId = intent?.data?.let { uri ->
+            uri.getQueryParameter("bookingId")
+                ?: uri.getQueryParameter("id")
+                ?: uri.getQueryParameter("ref")
+                ?: uri.lastPathSegment
+        }
+
+        val targetBookingId = extraBookingId ?: deepLinkBookingId
+        if (!targetBookingId.isNullOrBlank()) {
+            viewModel.openTicketById(targetBookingId)
+        }
     }
 }
 
@@ -86,6 +107,8 @@ fun TurfBookApp(viewModel: TurfViewModel) {
     val challenges by viewModel.challenges.collectAsState()
     val galleryImages by viewModel.galleryImages.collectAsState()
     val referrals by viewModel.referrals.collectAsState()
+    val reviews by viewModel.reviews.collectAsState()
+    val waitlistEntries by viewModel.waitlistEntries.collectAsState()
 
     val notificationPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
@@ -98,6 +121,7 @@ fun TurfBookApp(viewModel: TurfViewModel) {
             notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
         viewModel.runDailyUpcomingCheck(context, force = false)
+        viewModel.runTwoHourReminderCheck(context)
     }
 
     Scaffold(
@@ -143,24 +167,29 @@ fun TurfBookApp(viewModel: TurfViewModel) {
             when (uiState.activeTab) {
                 0 -> PitchesScreen(
                     pitches = pitches,
+                    reviews = reviews,
                     selectedFormat = uiState.selectedFormat,
                     language = uiState.language,
                     onSelectFormat = { viewModel.setFormatFilter(it) },
-                    onBookPitch = { pitchId -> viewModel.openBooking(pitchId = pitchId) }
+                    onBookPitch = { pitchId -> viewModel.openBooking(pitchId = pitchId) },
+                    onViewReviews = { pitch -> viewModel.openPitchReviewsDialog(pitch) }
                 )
                 1 -> ScheduleScreen(
                     pitches = pitches,
                     bookings = bookings,
                     blockedSlots = blockedSlots,
+                    waitlistEntries = waitlistEntries,
                     selectedPitchId = uiState.selectedPitchId,
                     selectedDate = uiState.selectedDate,
                     language = uiState.language,
                     onSelectPitch = { viewModel.setSelectedPitchId(it) },
                     onSelectDate = { viewModel.setDate(it) },
-                    onBookSlot = { pitchId, slot -> viewModel.openBooking(pitchId = pitchId, initialSlot = slot) }
+                    onBookSlot = { pitchId, slot -> viewModel.openBooking(pitchId = pitchId, initialSlot = slot) },
+                    onJoinWaitlist = { pitch, date, slot -> viewModel.openJoinWaitlist(pitch, date, slot) }
                 )
                 2 -> MyBookingsScreen(
                     bookings = bookings,
+                    reviews = reviews,
                     referrals = referrals,
                     userReferralCode = "JSC-WARRIOR26",
                     language = uiState.language,
@@ -170,7 +199,14 @@ fun TurfBookApp(viewModel: TurfViewModel) {
                     onRunDailyCheck = { viewModel.runDailyUpcomingCheck(context, force = true) },
                     onAddTestTomorrowBooking = { viewModel.addTestTomorrowBooking(context) },
                     lastCheckDate = uiState.lastDailyCheckDate,
-                    isDailyCheckRunning = uiState.isDailyCheckRunning
+                    isDailyCheckRunning = uiState.isDailyCheckRunning,
+                    onRateBooking = { viewModel.openRatePitchDialog(it) },
+                    onRunTwoHourCheck = { viewModel.runTwoHourReminderCheck(context) },
+                    onAddTestTwoHourBooking = { viewModel.addTestTwoHourBooking(context) },
+                    onTriggerBookingReminder = { viewModel.triggerTwoHourReminderForBooking(it, context) },
+                    onOpenEmailPreview = { viewModel.openEmailPreview(it) },
+                    dispatchedReminders = uiState.dispatchedTwoHourReminders,
+                    isTwoHourScannerRunning = uiState.isTwoHourScannerRunning
                 )
                 3 -> TeamsScreen(
                     teams = teams,
@@ -200,21 +236,41 @@ fun TurfBookApp(viewModel: TurfViewModel) {
                     pitches = pitches,
                     bookings = bookings,
                     blockedSlots = blockedSlots,
+                    waitlistEntries = waitlistEntries,
+                    dispatchedReminders = uiState.dispatchedTwoHourReminders,
                     language = uiState.language,
                     onUnlock = { viewModel.unlockAdmin(it) },
                     onLock = { viewModel.lockAdmin() },
                     onTogglePitchStatus = { viewModel.togglePitchStatus(it) },
                     onBlockSlot = { pitchId, date, slot, reason -> viewModel.blockSlot(pitchId, date, slot, reason) },
-                    onDeleteBlockedSlot = { viewModel.deleteBlockedSlot(it) }
+                    onDeleteBlockedSlot = { viewModel.deleteBlockedSlot(it) },
+                    onRemoveWaitlistEntry = { viewModel.removeWaitlistEntry(it) },
+                    onUpdateWaitlistStatus = { id, status -> viewModel.updateWaitlistStatus(id, status) },
+                    onTriggerTwoHourReminder = { viewModel.triggerTwoHourReminderForBooking(it, context) },
+                    onAddTestTwoHourBooking = { viewModel.addTestTwoHourBooking(context) },
+                    onOpenEmailPreview = { viewModel.openEmailPreview(it) },
+                    onViewTicket = { viewModel.openTicket(it) }
                 )
             }
 
-            // Top floating notification banners (Upcoming Match Daily Alert & Simulated SMS)
+            // Top floating notification banners (2-Hour Kick-off Alert, Upcoming Match Daily Alert & Simulated SMS)
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .align(Alignment.TopCenter)
             ) {
+                TwoHourBookingReminderBanner(
+                    reminder = uiState.activeTwoHourReminder,
+                    language = uiState.language,
+                    onQuickAccessTicket = { bookingId ->
+                        viewModel.openTicketById(bookingId)
+                    },
+                    onViewEmail = { reminder ->
+                        viewModel.openEmailPreview(reminder)
+                    },
+                    onDismiss = { viewModel.dismissTwoHourReminder() }
+                )
+
                 UpcomingBookingReminderBanner(
                     reminder = uiState.activeUpcomingReminder,
                     language = uiState.language,
@@ -285,8 +341,26 @@ fun TurfBookApp(viewModel: TurfViewModel) {
     TicketDialog(
         booking = uiState.activeTicket,
         language = uiState.language,
+        existingReview = reviews.find { it.bookingId == uiState.activeTicket?.id },
         onDismiss = { viewModel.closeTicket() },
-        onCancelBooking = { viewModel.cancelBooking(it) }
+        onCancelBooking = { viewModel.cancelBooking(it) },
+        onRatePitch = { viewModel.openRatePitchDialog(it) }
+    )
+
+    RatePitchDialog(
+        booking = uiState.ratingBooking,
+        language = uiState.language,
+        onDismiss = { viewModel.closeRatePitchDialog() },
+        onSubmitReview = { booking, rating, comment, tags ->
+            viewModel.submitPitchReview(booking, rating, comment, tags)
+        }
+    )
+
+    PitchReviewsDialog(
+        pitch = uiState.viewingReviewsPitch,
+        reviews = reviews,
+        language = uiState.language,
+        onDismiss = { viewModel.closePitchReviewsDialog() }
     )
 
     InviteFriendDialog(
@@ -317,6 +391,31 @@ fun TurfBookApp(viewModel: TurfViewModel) {
         onDismiss = { viewModel.closeChallengeDialog() },
         onSendChallenge = { challenger, opponent, pitchId, date, slot, splitMode, notes ->
             viewModel.createChallenge(challenger, opponent, pitchId, date, slot, splitMode, notes)
+        }
+    )
+
+    JoinWaitlistDialog(
+        isOpen = uiState.waitlistTarget != null,
+        pitch = uiState.waitlistTarget?.pitch,
+        date = uiState.waitlistTarget?.date ?: "",
+        slot = uiState.waitlistTarget?.slot ?: "",
+        language = uiState.language,
+        onDismiss = { viewModel.closeJoinWaitlist() },
+        onSubmitWaitlist = { pitch, date, slot, customerName, customerPhone, teamName, notes ->
+            viewModel.joinWaitlist(pitch, date, slot, customerName, customerPhone, teamName, notes)
+        }
+    )
+
+    EmailReminderPreviewDialog(
+        reminder = uiState.emailPreviewReminder,
+        language = uiState.language,
+        onDismiss = { viewModel.closeEmailPreview() },
+        onOpenTicket = {
+            val bookingId = uiState.emailPreviewReminder?.bookingId
+            viewModel.closeEmailPreview()
+            if (bookingId != null) {
+                viewModel.openTicketById(bookingId)
+            }
         }
     )
 }

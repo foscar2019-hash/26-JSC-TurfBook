@@ -90,4 +90,34 @@ interface TurfDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertReferrals(referrals: List<ReferralEntity>)
+
+    // Pitch Reviews
+    @Query("SELECT * FROM pitch_reviews ORDER BY date DESC")
+    fun getAllReviews(): Flow<List<PitchReviewEntity>>
+
+    @Query("SELECT * FROM pitch_reviews WHERE pitchId = :pitchId ORDER BY date DESC")
+    fun getReviewsForPitch(pitchId: String): Flow<List<PitchReviewEntity>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertReview(review: PitchReviewEntity)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertReviews(reviews: List<PitchReviewEntity>)
+
+    // Waitlist
+    @Query("SELECT * FROM waitlist_entries ORDER BY createdAt ASC")
+    fun getAllWaitlistEntries(): Flow<List<WaitlistEntryEntity>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertWaitlistEntry(entry: WaitlistEntryEntity)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertWaitlistEntries(entries: List<WaitlistEntryEntity>)
+
+    @Query("DELETE FROM waitlist_entries WHERE id = :id")
+    suspend fun deleteWaitlistEntry(id: String)
+
+    @Query("UPDATE waitlist_entries SET status = :status WHERE id = :id")
+    suspend fun updateWaitlistStatus(id: String, status: String)
 }
+

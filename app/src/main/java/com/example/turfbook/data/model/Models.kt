@@ -446,6 +446,161 @@ data class UpcomingBookingReminder(
     val isRead: Boolean = false
 )
 
+@Serializable
+data class TwoHourBookingReminder(
+    val id: String,
+    val bookingId: String,
+    val bookingReference: String,
+    val pitchName: String,
+    val date: String,
+    val startTime: String,
+    val endTime: String,
+    val teamName: String,
+    val customerName: String,
+    val customerPhone: String,
+    val customerEmail: String,
+    val quickAccessLink: String,
+    val webAccessLink: String,
+    val notificationTitleEn: String,
+    val notificationTitleSo: String,
+    val notificationBodyEn: String,
+    val notificationBodySo: String,
+    val emailSubject: String,
+    val emailBodyPlainText: String,
+    val emailBodyHtml: String,
+    val triggeredAt: String,
+    val minutesUntilKickoff: Long = 120,
+    val emailDispatched: Boolean = true,
+    val pushDispatched: Boolean = true
+)
+
+@Serializable
+data class PitchReview(
+    val id: String,
+    val bookingId: String,
+    val pitchId: String,
+    val pitchName: String,
+    val customerName: String,
+    val teamName: String,
+    val rating: Int, // 1 to 5
+    val comment: String,
+    val date: String, // e.g. "2026-09-12"
+    val tags: List<String> = emptyList()
+)
+
+data class PitchRatingSummary(
+    val pitchId: String,
+    val averageRating: Double = 0.0,
+    val reviewCount: Int = 0,
+    val distribution: Map<Int, Int> = emptyMap()
+)
+
+@Serializable
+data class WaitlistEntry(
+    val id: String,
+    val pitchId: String,
+    val pitchName: String,
+    val date: String, // YYYY-MM-DD
+    val slot: String, // e.g. "18:00 - 19:00"
+    val customerName: String,
+    val customerPhone: String,
+    val teamName: String,
+    val notes: String = "",
+    val status: String = "WAITING", // "WAITING", "NOTIFIED", "CONVERTED", "CANCELLED"
+    val createdAt: Long = System.currentTimeMillis(),
+    val createdTimeStr: String = ""
+)
+
+object BookingTimeHelper {
+    /**
+     * Determines whether the booking's end time has passed compared to the reference time (default: now).
+     * Format for date: "yyyy-MM-dd", endTime: "HH:mm" (e.g. "20:00" or "00:00").
+     */
+    fun isBookingTimePassed(dateStr: String, endTimeStr: String, now: java.util.Date = java.util.Date()): Boolean {
+        return try {
+            val cleanEndTime = endTimeStr.trim()
+            val sdf = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.getDefault())
+
+            // If endTime is "00:00" or "24:00", it refers to midnight at the end of the day or start of next day
+            val endDateTime = if (cleanEndTime == "00:00" || cleanEndTime == "24:00") {
+                val cal = java.util.Calendar.getInstance().apply {
+                    time = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault()).parse(dateStr) ?: now
+                    add(java.util.Calendar.DAY_OF_YEAR, 1)
+                    set(java.util.Calendar.HOUR_OF_DAY, 0)
+                    set(java.util.Calendar.MINUTE, 0)
+                    set(java.util.Calendar.SECOND, 0)
+                    set(java.util.Calendar.MILLISECOND, 0)
+                }
+                cal.time
+            } else {
+                sdf.parse("$dateStr $cleanEndTime")
+            }
+
+            if (endDateTime != null) {
+                endDateTime.before(now) || endDateTime.time <= now.time
+            } else {
+                val dateOnly = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault())
+                val bDate = dateOnly.parse(dateStr)
+                val todayDate = dateOnly.parse(dateOnly.format(now))
+                bDate != null && todayDate != null && bDate.before(todayDate)
+            }
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    fun calculateRatingSummary(pitchId: String, reviews: List<PitchReview>): PitchRatingSummary {
+        val pitchReviews = reviews.filter { it.pitchId == pitchId }
+        if (pitchReviews.isEmpty()) {
+            return PitchRatingSummary(pitchId = pitchId, averageRating = 0.0, reviewCount = 0)
+        }
+        val avg = pitchReviews.map { it.rating }.average()
+        val dist = pitchReviews.groupingBy { it.rating }.eachCount()
+        val roundedAvg = kotlin.math.round(avg * 10) / 10.0
+        return PitchRatingSummary(
+            pitchId = pitchId,
+            averageRating = roundedAvg,
+            reviewCount = pitchReviews.size,
+            distribution = dist
+        )
+    }
+
+    /**
+     * Calculates minutes until the start of a booking match.
+     * Returns positive number if in the future, negative if kickoff has passed.
+     */
+    fun getMinutesUntilMatch(dateStr: String, startTimeStr: String, now: java.util.Date = java.util.Date()): Long {
+        return try {
+            val cleanStartTime = if (startTimeStr.contains(" - ")) {
+                startTimeStr.split(" - ")[0].trim()
+            } else {
+                startTimeStr.trim()
+            }
+            val sdf = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.getDefault())
+            val matchDateTime = sdf.parse("$dateStr $cleanStartTime") ?: return Long.MIN_VALUE
+            (matchDateTime.time - now.time) / (60 * 1000)
+        } catch (e: Exception) {
+            Long.MIN_VALUE
+        }
+    }
+
+    /**
+     * Checks whether a booking is approximately 2 hours away (by default between 30 and 150 minutes before kickoff).
+     */
+    fun isWithinTwoHourWindow(dateStr: String, startTimeStr: String, now: java.util.Date = java.util.Date(), minMinutes: Long = 30, maxMinutes: Long = 150): Boolean {
+        val minutesUntil = getMinutesUntilMatch(dateStr, startTimeStr, now)
+        return minutesUntil in minMinutes..maxMinutes
+    }
+
+    fun generateQuickAccessDeepLink(bookingId: String, referenceCode: String): String {
+        return "turfbook://ticket?bookingId=$bookingId&ref=$referenceCode"
+    }
+
+    fun generateQuickAccessWebUrl(bookingId: String): String {
+        return "https://turfbook.jsc.so/ticket?id=$bookingId"
+    }
+}
+
 object AppConfig {
     const val APP_NAME = "26 JSC TurfBook"
     const val TAGLINE_EN = "Premier Sports Centre & Floodlit Turf Booking"
@@ -477,3 +632,144 @@ object AppConfig {
         "23:00 - 00:00"
     )
 }
+
+@Serializable
+data class TeamLoyaltyLeaderboardEntry(
+    val rank: Int,
+    val teamName: String,
+    val logoEmoji: String,
+    val completedBookings: Int,
+    val totalHours: Int,
+    val loyaltyPointsEarned: Int,
+    val rewardPerkEn: String,
+    val rewardPerkSo: String,
+    val discountPercent: Int,
+    val badgeTier: String, // "CHAMPION", "RUNNER_UP", "PODIUM", "CONTENDER"
+    val accentColorHex: String
+) {
+    companion object {
+        fun buildLeaderboard(
+            bookings: List<Booking>,
+            registeredTeams: List<Team> = emptyList()
+        ): List<TeamLoyaltyLeaderboardEntry> {
+            val todayStr = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault()).format(java.util.Date())
+
+            // Baseline historical completed bookings for community teams at 26 JSC Arena
+            val baselineTeamData = mapOf(
+                "26 June Warriors FC" to Triple("🛡️", 13, "#059669"),
+                "Elman Hargeisa Stars" to Triple("⭐", 10, "#2563eb"),
+                "Burao United FC" to Triple("🦁", 7, "#d97706"),
+                "Banaadir United" to Triple("⚡", 5, "#7c3aed"),
+                "Shacabka Stars FC" to Triple("🦅", 4, "#ea580c"),
+                "Hargeisa Lions FC" to Triple("🐆", 2, "#0284c7")
+            )
+
+            // Dynamic count of completed bookings per team from bookings
+            val dynamicCompletedCounts = mutableMapOf<String, Int>()
+            val dynamicHours = mutableMapOf<String, Int>()
+            val dynamicPoints = mutableMapOf<String, Int>()
+
+            for (b in bookings) {
+                val isCompleted = b.paymentStatus == "paid" && (
+                    BookingTimeHelper.isBookingTimePassed(b.date, b.endTime) ||
+                    b.date < todayStr ||
+                    b.notes.contains("finished", ignoreCase = true) ||
+                    b.smsConfirmed
+                )
+                if (isCompleted && b.teamName.isNotBlank()) {
+                    val count = dynamicCompletedCounts.getOrDefault(b.teamName, 0) + 1
+                    dynamicCompletedCounts[b.teamName] = count
+                    val hrs = dynamicHours.getOrDefault(b.teamName, 0) + b.durationHours
+                    dynamicHours[b.teamName] = hrs
+                    val pts = dynamicPoints.getOrDefault(b.teamName, 0) + b.loyaltyPoints
+                    dynamicPoints[b.teamName] = pts
+                }
+            }
+
+            // Union of teams: baseline + registered + from bookings
+            val allTeamNames = (baselineTeamData.keys + registeredTeams.map { it.name } + dynamicCompletedCounts.keys).distinct()
+
+            val rawEntries = allTeamNames.map { name ->
+                val base = baselineTeamData[name]
+                val registered = registeredTeams.find { it.name.equals(name, ignoreCase = true) }
+
+                val emoji = base?.first ?: registered?.logoEmoji ?: "⚽"
+                val colorHex = base?.third ?: registered?.color ?: "#10b981"
+                val baselineCount = base?.second ?: (registered?.stats?.matchesPlayed ?: 0)
+
+                val dynCount = dynamicCompletedCounts[name] ?: 0
+                val totalCompleted = baselineCount + dynCount
+                val totalHrs = totalCompleted + (dynamicHours[name] ?: 0)
+                val totalPts = (totalCompleted * 250) + (dynamicPoints[name] ?: 0)
+
+                totalCompleted to (name to listOf(emoji, totalHrs.toString(), totalPts.toString(), colorHex))
+            }
+
+            return rawEntries
+                .sortedByDescending { it.first }
+                .take(5)
+                .mapIndexed { index, pair ->
+                    val rank = index + 1
+                    val completed = pair.first
+                    val name = pair.second.first
+                    val emoji = pair.second.second[0]
+                    val hours = pair.second.second[1].toIntOrNull() ?: completed
+                    val points = pair.second.second[2].toIntOrNull() ?: (completed * 250)
+                    val colorHex = pair.second.second[3]
+
+                    val perkEn: String
+                    val perkSo: String
+                    val discount: Int
+                    val badgeTier: String
+
+                    when (rank) {
+                        1 -> {
+                            perkEn = "15% Off All Bookings + Free Match Ball + Priority Night Window"
+                            perkSo = "15% Qiimo-dhimis + Kubbad Bilaash ah + Xilliga Habeenkii ee Mudnaanta leh"
+                            discount = 15
+                            badgeTier = "CHAMPION"
+                        }
+                        2 -> {
+                            perkEn = "10% Off All Bookings + Free Bibs Rental"
+                            perkSo = "10% Qiimo-dhimis + Jaakadaha Ciyaarta oo Bilaash ah"
+                            discount = 10
+                            badgeTier = "RUNNER_UP"
+                        }
+                        3 -> {
+                            perkEn = "5% Off All Bookings + Priority Weekend Scheduling"
+                            perkSo = "5% Qiimo-dhimis + Ballamaha Toddobaadka ee Mudnaanta leh"
+                            discount = 5
+                            badgeTier = "PODIUM"
+                        }
+                        4 -> {
+                            perkEn = "+50 Bonus Loyalty Points per match + Water Pack Voucher"
+                            perkSo = "+50 Dhibco dheeraad ah kulan kasta + Biyaha Ciyaarta"
+                            discount = 3
+                            badgeTier = "CONTENDER"
+                        }
+                        else -> {
+                            perkEn = "+50 Bonus Loyalty Points per match + Free Warm-up Cones"
+                            perkSo = "+50 Dhibco dheeraad ah kulan kasta + Agabka Tababarka"
+                            discount = 2
+                            badgeTier = "CONTENDER"
+                        }
+                    }
+
+                    TeamLoyaltyLeaderboardEntry(
+                        rank = rank,
+                        teamName = name,
+                        logoEmoji = emoji,
+                        completedBookings = completed,
+                        totalHours = hours,
+                        loyaltyPointsEarned = points,
+                        rewardPerkEn = perkEn,
+                        rewardPerkSo = perkSo,
+                        discountPercent = discount,
+                        badgeTier = badgeTier,
+                        accentColorHex = colorHex
+                    )
+                }
+        }
+    }
+}
+

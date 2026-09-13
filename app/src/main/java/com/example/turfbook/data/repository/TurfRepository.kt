@@ -49,6 +49,30 @@ class TurfRepository(private val dao: TurfDao) {
         list.map { it.toModel() }
     }
 
+    val reviews: Flow<List<PitchReview>> = dao.getAllReviews().map { list ->
+        list.map { it.toModel() }
+    }
+
+    val waitlistEntries: Flow<List<WaitlistEntry>> = dao.getAllWaitlistEntries().map { list ->
+        list.map { it.toModel() }
+    }
+
+    suspend fun insertReview(review: PitchReview) {
+        dao.insertReview(review.toEntity())
+    }
+
+    suspend fun joinWaitlist(entry: WaitlistEntry) {
+        dao.insertWaitlistEntry(entry.toEntity())
+    }
+
+    suspend fun removeWaitlistEntry(id: String) {
+        dao.deleteWaitlistEntry(id)
+    }
+
+    suspend fun updateWaitlistStatus(id: String, status: String) {
+        dao.updateWaitlistStatus(id, status)
+    }
+
     suspend fun insertBooking(booking: Booking) {
         dao.insertBooking(booking.toEntity())
     }
@@ -127,6 +151,16 @@ class TurfRepository(private val dao: TurfDao) {
         val existingReferrals = dao.getAllReferrals().first()
         if (existingReferrals.isEmpty()) {
             dao.insertReferrals(getInitialReferrals().map { it.toEntity() })
+        }
+
+        val existingReviews = dao.getAllReviews().first()
+        if (existingReviews.isEmpty()) {
+            dao.insertReviews(getInitialReviews().map { it.toEntity() })
+        }
+
+        val existingWaitlists = dao.getAllWaitlistEntries().first()
+        if (existingWaitlists.isEmpty()) {
+            dao.insertWaitlistEntries(getInitialWaitlistEntries().map { it.toEntity() })
         }
     }
 
@@ -331,10 +365,36 @@ class TurfRepository(private val dao: TurfDao) {
         fun getInitialBookings(): List<Booking> {
             val cal = Calendar.getInstance()
             val today = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(cal.time)
+            val calPast = Calendar.getInstance().apply { add(Calendar.DAY_OF_YEAR, -1) }
+            val yesterday = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(calPast.time)
             cal.add(Calendar.DAY_OF_YEAR, 1)
             val tomorrow = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(cal.time)
 
             return listOf(
+                Booking(
+                    id = "b-1000",
+                    referenceCode = "JSC-7712",
+                    pitchId = "pitch-1",
+                    pitchName = "Pitch 1 - Championship Arena",
+                    date = yesterday,
+                    startTime = "18:00",
+                    endTime = "19:00",
+                    durationHours = 1,
+                    customerName = "Axmed Cali",
+                    teamName = "26 June Warriors FC",
+                    customerPhone = "+252633347832",
+                    customerEmail = "foscar2019@gmail.com",
+                    paymentMethod = PaymentMethod.ZAAD,
+                    paymentStatus = "paid",
+                    transactionId = "ZD-662198",
+                    merchantNumber = "445686",
+                    totalAmount = 25.0,
+                    loyaltyPoints = 250,
+                    addOns = listOf("addon-ball"),
+                    notes = "Match finished. Great 7-a-side match against Shacabka Stars",
+                    createdAt = "$yesterday 17:00",
+                    smsConfirmed = true
+                ),
                 Booking(
                     id = "b-1001",
                     referenceCode = "JSC-8841",
@@ -515,6 +575,157 @@ class TurfRepository(private val dao: TurfDao) {
                 bookingReference = "JSC-9114"
             )
         )
+
+        fun getInitialReviews(): List<PitchReview> = listOf(
+            PitchReview(
+                id = "rev-1",
+                bookingId = "b-seed-1",
+                pitchId = "pitch-1",
+                pitchName = "Pitch 1 - Championship Arena",
+                customerName = "Jaamac Cilmi",
+                teamName = "Hargeisa Stars FC",
+                rating = 5,
+                comment = "Surface is in immaculate condition! FIFA synthetic grass feels very soft on joints and the high-lumen floodlights made our night derby match feel like a professional stadium.",
+                date = "2026-09-10",
+                tags = listOf("Smooth Turf", "Bright Floodlights", "Electronic Scoreboard")
+            ),
+            PitchReview(
+                id = "rev-2",
+                bookingId = "b-seed-2",
+                pitchId = "pitch-1",
+                pitchName = "Pitch 1 - Championship Arena",
+                customerName = "Khadar Maxamed",
+                teamName = "Banaadir United",
+                rating = 5,
+                comment = "Garoon heer sare ah oo aad u waasac ah! Ileyska habeenkii waa heer caalami ah, kuraasta beddelkuna aad bay u qabow yihiin.",
+                date = "2026-09-11",
+                tags = listOf("Heer Caalami", "Ileys Fiican", "Kuraas Qabow")
+            ),
+            PitchReview(
+                id = "rev-3",
+                bookingId = "b-seed-3",
+                pitchId = "pitch-1",
+                pitchName = "Pitch 1 - Championship Arena",
+                customerName = "Axmed Cali",
+                teamName = "26 June Warriors FC",
+                rating = 4,
+                comment = "Great ball bounce and firm grip even during fast turns. Front desk reception was very courteous with match bibs and ball.",
+                date = "2026-09-12",
+                tags = listOf("Firm Grip", "Clean Dugouts", "Friendly Staff")
+            ),
+            PitchReview(
+                id = "rev-4",
+                bookingId = "b-seed-4",
+                pitchId = "pitch-2",
+                pitchName = "Pitch 2 - Premier Astro Turf",
+                customerName = "Cumar Daahir",
+                teamName = "Red Sea Strikers",
+                rating = 5,
+                comment = "Fastest astro turf in Hargeisa! Perfect ball roll cushioning for 5-a-side quick passing. Our team loved the water cooler setup.",
+                date = "2026-09-09",
+                tags = listOf("Fast Ball Roll", "Cushioned Turf", "Great Water Setup")
+            ),
+            PitchReview(
+                id = "rev-5",
+                bookingId = "b-seed-5",
+                pitchId = "pitch-2",
+                pitchName = "Pitch 2 - Premier Astro Turf",
+                customerName = "Mustafe Nuur",
+                teamName = "Shacabka FC",
+                rating = 5,
+                comment = "Garoonka 2-aad waa kan ugu fiican 5-a-side. Biyaha qabow iyo kubbadaha cusub aad baan ugu riyaaqnay.",
+                date = "2026-09-11",
+                tags = listOf("Kubad Wanaagsan", "Astro Turf Casri ah")
+            ),
+            PitchReview(
+                id = "rev-6",
+                bookingId = "b-seed-6",
+                pitchId = "pitch-3",
+                pitchName = "Pitch 3 - VIP Floodlight Turf",
+                customerName = "Cabdiweli Xasan",
+                teamName = "VIP United",
+                rating = 5,
+                comment = "The VIP shaded lounge area and camera mount for match recording was top notch! Zero slippery spots on the shock pad.",
+                date = "2026-09-08",
+                tags = listOf("VIP Lounge", "Shock Pad Safety", "HD Camera Mount")
+            ),
+            PitchReview(
+                id = "rev-7",
+                bookingId = "b-seed-7",
+                pitchId = "pitch-3",
+                pitchName = "Pitch 3 - VIP Floodlight Turf",
+                customerName = "Ismaaciil Cali",
+                teamName = "Horn Stars",
+                rating = 4,
+                comment = "Excellent floodlights covering every angle of the pitch. Very easy on the knees.",
+                date = "2026-09-12",
+                tags = listOf("Even Lighting", "Joint Protection")
+            ),
+            PitchReview(
+                id = "rev-8",
+                bookingId = "b-seed-8",
+                pitchId = "pitch-4",
+                pitchName = "Pitch 4 - Skills & Futsal Cage",
+                customerName = "Yoonis Axmed",
+                teamName = "Futsal Kings",
+                rating = 5,
+                comment = "The rebound boards around the cage make for non-stop action! Great for intense technical training and futsal skills.",
+                date = "2026-09-10",
+                tags = listOf("Rebound Boards", "Futsal Skills", "High Intensity")
+            )
+        )
+
+        fun getInitialWaitlistEntries(): List<WaitlistEntry> {
+            val cal = Calendar.getInstance()
+            val today = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(cal.time)
+            cal.add(Calendar.DAY_OF_YEAR, 1)
+            val tomorrow = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(cal.time)
+
+            return listOf(
+                WaitlistEntry(
+                    id = "wl-101",
+                    pitchId = "pitch-1",
+                    pitchName = "Pitch 1 - Championship Arena",
+                    date = today,
+                    slot = "19:00 - 20:00",
+                    customerName = "Mustafe Cabdi",
+                    customerPhone = "+252634123456",
+                    teamName = "Red Sea Tigers FC",
+                    notes = "Available immediately if prime slot opens up",
+                    status = "WAITING",
+                    createdAt = System.currentTimeMillis() - 7200000,
+                    createdTimeStr = "Today, 17:15"
+                ),
+                WaitlistEntry(
+                    id = "wl-102",
+                    pitchId = "pitch-1",
+                    pitchName = "Pitch 1 - Championship Arena",
+                    date = today,
+                    slot = "19:00 - 20:00",
+                    customerName = "Guuleed Maxamed",
+                    customerPhone = "+252634887766",
+                    teamName = "Hargeisa Falcons",
+                    notes = "Squad is warmed up and ready in 26 June area",
+                    status = "WAITING",
+                    createdAt = System.currentTimeMillis() - 3600000,
+                    createdTimeStr = "Today, 18:30"
+                ),
+                WaitlistEntry(
+                    id = "wl-103",
+                    pitchId = "pitch-2",
+                    pitchName = "Pitch 2 - Premier Astro Turf",
+                    date = today,
+                    slot = "20:00 - 21:00",
+                    customerName = "Cilmi Nuur",
+                    customerPhone = "+252634559922",
+                    teamName = "Stars of Somaliland",
+                    notes = "Can take the pitch anytime after 19:30",
+                    status = "WAITING",
+                    createdAt = System.currentTimeMillis() - 10800000,
+                    createdTimeStr = "Today, 16:00"
+                )
+            )
+        }
     }
 }
 
@@ -728,3 +939,60 @@ fun ReferralInvite.toEntity() = ReferralEntity(
     date = date,
     bookingReference = bookingReference
 )
+
+fun PitchReviewEntity.toModel() = PitchReview(
+    id = id,
+    bookingId = bookingId,
+    pitchId = pitchId,
+    pitchName = pitchName,
+    customerName = customerName,
+    teamName = teamName,
+    rating = rating,
+    comment = comment,
+    date = date,
+    tags = tags
+)
+
+fun PitchReview.toEntity() = PitchReviewEntity(
+    id = id,
+    bookingId = bookingId,
+    pitchId = pitchId,
+    pitchName = pitchName,
+    customerName = customerName,
+    teamName = teamName,
+    rating = rating,
+    comment = comment,
+    date = date,
+    tags = tags
+)
+
+fun WaitlistEntryEntity.toModel() = WaitlistEntry(
+    id = id,
+    pitchId = pitchId,
+    pitchName = pitchName,
+    date = date,
+    slot = slot,
+    customerName = customerName,
+    customerPhone = customerPhone,
+    teamName = teamName,
+    notes = notes,
+    status = status,
+    createdAt = createdAt,
+    createdTimeStr = createdTimeStr
+)
+
+fun WaitlistEntry.toEntity() = WaitlistEntryEntity(
+    id = id,
+    pitchId = pitchId,
+    pitchName = pitchName,
+    date = date,
+    slot = slot,
+    customerName = customerName,
+    customerPhone = customerPhone,
+    teamName = teamName,
+    notes = notes,
+    status = status,
+    createdAt = createdAt,
+    createdTimeStr = createdTimeStr
+)
+

@@ -9,12 +9,13 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -23,7 +24,9 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.example.turfbook.data.model.AppConfig
 import com.example.turfbook.data.model.Booking
+import com.example.turfbook.data.model.BookingTimeHelper
 import com.example.turfbook.data.model.Language
+import com.example.turfbook.data.model.PitchReview
 import com.example.turfbook.ui.theme.*
 import java.net.URLEncoder
 
@@ -31,8 +34,10 @@ import java.net.URLEncoder
 fun TicketDialog(
     booking: Booking?,
     language: Language,
+    existingReview: PitchReview? = null,
     onDismiss: () -> Unit,
-    onCancelBooking: (String) -> Unit
+    onCancelBooking: (String) -> Unit,
+    onRatePitch: (Booking) -> Unit = {}
 ) {
     if (booking == null) return
     val context = LocalContext.current
@@ -235,7 +240,185 @@ fun TicketDialog(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(10.dp))
+
+                // Digital Ticket Quick Access Link & Automation Card
+                Surface(
+                    color = StadiumCardSurface,
+                    shape = RoundedCornerShape(10.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, EmeraldPrimary.copy(alpha = 0.4f)),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("ticket_quick_access_section")
+                ) {
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Icon(Icons.Default.ElectricBolt, contentDescription = null, tint = EmeraldPrimary, modifier = Modifier.size(16.dp))
+                                Text(
+                                    text = if (language == Language.SO) "Xidhiidhka Degdegga ah (Quick Access)" else "Digital Ticket Quick Access Link",
+                                    color = EmeraldPrimary,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 11.sp
+                                )
+                            }
+                            Surface(
+                                color = EmeraldPrimary.copy(alpha = 0.2f),
+                                shape = RoundedCornerShape(4.dp)
+                            ) {
+                                Text(
+                                    text = "2H AUTOMATION",
+                                    color = EmeraldPrimary,
+                                    fontSize = 9.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(6.dp))
+
+                        Text(
+                            text = if (language == Language.SO)
+                                "Xidhiidhkan tooska ah waxa loo soo diray email-kaaga 2 saac ka hor ciyaarta si aad degdeg ugu furato tigidhadan adigoon raadin."
+                            else
+                                "This verified digital ticket link is dispatched to your email 2 hours prior to kick-off for 1-tap fast access at pitch entrance.",
+                            color = TextSecondary,
+                            fontSize = 10.sp,
+                            lineHeight = 14.sp
+                        )
+
+                        Spacer(modifier = Modifier.height(6.dp))
+
+                        val quickAccessUrl = remember(booking.id) { BookingTimeHelper.generateQuickAccessDeepLink(booking.id) }
+                        Surface(
+                            color = StadiumBgDark,
+                            shape = RoundedCornerShape(6.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                text = quickAccessUrl,
+                                color = AmberGold,
+                                fontFamily = FontFamily.Monospace,
+                                fontSize = 10.sp,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp)
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                // Post-Match Pitch Rating Section
+                val isTimePassed = BookingTimeHelper.isBookingTimePassed(booking.date, booking.endTime)
+                if (isTimePassed) {
+                    if (existingReview != null) {
+                        Surface(
+                            color = StadiumCardSurface,
+                            shape = RoundedCornerShape(10.dp),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, AmberGold.copy(alpha = 0.5f)),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(modifier = Modifier.padding(12.dp)) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = if (language == Language.SO) "Qiimeyntaadii Garoonka:" else "Your Pitch Review:",
+                                        color = AmberGold,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 11.sp
+                                    )
+                                    Row {
+                                        repeat(5) { starIndex ->
+                                            Icon(
+                                                imageVector = if (starIndex < existingReview.rating) Icons.Default.Star else Icons.Default.StarBorder,
+                                                contentDescription = null,
+                                                tint = if (starIndex < existingReview.rating) AmberGold else TextMuted,
+                                                modifier = Modifier.size(13.dp)
+                                            )
+                                        }
+                                    }
+                                }
+                                if (existingReview.comment.isNotBlank()) {
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(
+                                        text = "\"${existingReview.comment}\"",
+                                        color = Color.White,
+                                        fontSize = 11.sp
+                                    )
+                                }
+                                Spacer(modifier = Modifier.height(6.dp))
+                                OutlinedButton(
+                                    onClick = { onRatePitch(booking) },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(32.dp)
+                                        .testTag("ticket_edit_review_button"),
+                                    shape = RoundedCornerShape(6.dp),
+                                    border = androidx.compose.foundation.BorderStroke(0.8.dp, AmberGold),
+                                    contentPadding = PaddingValues(0.dp)
+                                ) {
+                                    Text(
+                                        text = if (language == Language.SO) "Wax ka beddel Qiimeynta" else "Update Rating",
+                                        color = AmberGold,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
+                        }
+                    } else {
+                        Button(
+                            onClick = { onRatePitch(booking) },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(42.dp)
+                                .testTag("ticket_rate_pitch_button"),
+                            colors = ButtonDefaults.buttonColors(containerColor = AmberGold),
+                            shape = RoundedCornerShape(10.dp)
+                        ) {
+                            Icon(Icons.Default.Star, contentDescription = null, tint = Color.Black, modifier = Modifier.size(17.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = if (language == Language.SO) "⭐ Qiimee Garoonka (Leave Review)" else "⭐ Rate This Pitch & Match",
+                                color = Color.Black,
+                                fontWeight = FontWeight.ExtraBold,
+                                fontSize = 12.sp
+                            )
+                        }
+                    }
+                } else {
+                    Surface(
+                        color = StadiumCardSurface.copy(alpha = 0.6f),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(Icons.Default.Schedule, contentDescription = null, tint = TextMuted, modifier = Modifier.size(13.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = if (language == Language.SO)
+                                    "Qiimeynta garoonku waxay furmi doontaa ciyaarta kadib (${booking.endTime})"
+                                else
+                                    "Pitch rating unlocks after match ends (${booking.endTime})",
+                                color = TextMuted,
+                                fontSize = 10.sp
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(14.dp))
 
                 // Actions: WhatsApp, Call, Cancel
                 Row(

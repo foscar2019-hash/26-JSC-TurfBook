@@ -17,6 +17,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.turfbook.data.model.*
@@ -32,12 +33,14 @@ fun ScheduleScreen(
     pitches: List<Pitch>,
     bookings: List<Booking>,
     blockedSlots: List<BlockedSlot>,
+    waitlistEntries: List<WaitlistEntry> = emptyList(),
     selectedPitchId: String,
     selectedDate: String,
     language: Language,
     onSelectPitch: (String) -> Unit,
     onSelectDate: (String) -> Unit,
-    onBookSlot: (pitchId: String, slot: String) -> Unit
+    onBookSlot: (pitchId: String, slot: String) -> Unit,
+    onJoinWaitlist: (pitch: Pitch, date: String, slot: String) -> Unit
 ) {
     val currentPitch = pitches.find { it.id == selectedPitchId } ?: pitches.firstOrNull()
 
@@ -181,6 +184,9 @@ fun ScheduleScreen(
 
                 val isNight = TurfViewModel.isNightSlot(slot)
                 val rate = if (isNight) (currentPitch?.nightRate ?: 25.0) else (currentPitch?.dayRate ?: 18.0)
+                val slotWaitlist = waitlistEntries.filter {
+                    it.pitchId == selectedPitchId && it.date == selectedDate && (it.slot == slot || it.slot.startsWith(startHour))
+                }
 
                 SlotRowCard(
                     slot = slot,
@@ -188,10 +194,16 @@ fun ScheduleScreen(
                     isNight = isNight,
                     booking = bookingMatch,
                     blocked = blockedMatch,
+                    waitlist = slotWaitlist,
                     language = language,
                     onBook = {
                         if (bookingMatch == null && blockedMatch == null) {
                             onBookSlot(selectedPitchId, slot)
+                        }
+                    },
+                    onJoinWaitlist = {
+                        if (currentPitch != null) {
+                            onJoinWaitlist(currentPitch, selectedDate, slot)
                         }
                     }
                 )
@@ -207,8 +219,10 @@ fun SlotRowCard(
     isNight: Boolean,
     booking: Booking?,
     blocked: BlockedSlot?,
+    waitlist: List<WaitlistEntry>,
     language: Language,
-    onBook: () -> Unit
+    onBook: () -> Unit,
+    onJoinWaitlist: () -> Unit
 ) {
     val isBooked = booking != null
     val isBlocked = blocked != null
@@ -217,7 +231,10 @@ fun SlotRowCard(
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(enabled = isAvailable) { onBook() }
+            .clickable {
+                if (isAvailable) onBook()
+                else if (isBooked) onJoinWaitlist()
+            }
             .border(
                 width = 1.dp,
                 color = when {
@@ -269,23 +286,75 @@ fun SlotRowCard(
 
             when {
                 isBooked -> {
-                    Surface(
-                        color = Color(0x33DC2626),
-                        shape = RoundedCornerShape(6.dp)
+                    Column(
+                        horizontalAlignment = Alignment.End,
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically
+                        Surface(
+                            color = Color(0x33DC2626),
+                            shape = RoundedCornerShape(6.dp)
                         ) {
-                            Icon(Icons.Default.Lock, contentDescription = null, tint = Color(0xFFEF4444), modifier = Modifier.size(12.dp))
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text(
-                                text = "${booking?.teamName}",
-                                color = Color(0xFFEF4444),
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 11.sp,
-                                maxLines = 1
-                            )
+                            Row(
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(Icons.Default.Lock, contentDescription = null, tint = Color(0xFFEF4444), modifier = Modifier.size(11.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = "${booking?.teamName}",
+                                    color = Color(0xFFEF4444),
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 10.sp,
+                                    maxLines = 1
+                                )
+                            }
+                        }
+
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            if (waitlist.isNotEmpty()) {
+                                Surface(
+                                    color = AmberGold.copy(alpha = 0.2f),
+                                    shape = RoundedCornerShape(4.dp)
+                                ) {
+                                    Text(
+                                        text = "${waitlist.size} in queue",
+                                        color = AmberGold,
+                                        fontSize = 9.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+                                    )
+                                }
+                            }
+
+                            Button(
+                                onClick = onJoinWaitlist,
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = AmberGold,
+                                    contentColor = Color.Black
+                                ),
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                shape = RoundedCornerShape(6.dp),
+                                modifier = Modifier
+                                    .defaultMinSize(minWidth = 1.dp, minHeight = 26.dp)
+                                    .testTag("join_waitlist_btn_${slot.replace(":", "_").replace(" ", "_")}")
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.HourglassTop,
+                                    contentDescription = null,
+                                    tint = Color.Black,
+                                    modifier = Modifier.size(11.dp)
+                                )
+                                Spacer(modifier = Modifier.width(3.dp))
+                                Text(
+                                    text = if (language == Language.SO) "Gal Liiska" else "Join Waitlist",
+                                    color = Color.Black,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 10.sp
+                                )
+                            }
                         }
                     }
                 }

@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.example.turfbook.data.model.*
+import com.example.turfbook.data.notification.TwoHourBookingReminderManager
 import com.example.turfbook.data.notification.UpcomingBookingNotificationManager
 import com.example.turfbook.data.repository.TurfRepository
 import kotlinx.coroutines.delay
@@ -31,6 +32,11 @@ data class TurfUiState(
     val activeTicket: Booking? = null,
     val activeSms: SimulatedSmsNotification? = null,
     val activeUpcomingReminder: UpcomingBookingReminder? = null,
+    val activeTwoHourReminder: TwoHourBookingReminder? = null,
+    val emailPreviewReminder: TwoHourBookingReminder? = null,
+    val dispatchedTwoHourReminders: List<TwoHourBookingReminder> = emptyList(),
+    val isTwoHourScannerRunning: Boolean = false,
+    val lastTwoHourScanTime: String? = null,
     val lastDailyCheckDate: String? = null,
     val isDailyCheckRunning: Boolean = false,
     val toastMessage: String? = null,
@@ -39,7 +45,16 @@ data class TurfUiState(
     val isChallengeDialogOpen: Boolean = false,
     val challengeOpponentTeam: Team? = null,
     val galleryCategory: String = "All",
-    val isInviteFriendDialogOpen: Boolean = false
+    val isInviteFriendDialogOpen: Boolean = false,
+    val ratingBooking: Booking? = null,
+    val viewingReviewsPitch: Pitch? = null,
+    val waitlistTarget: WaitlistTarget? = null
+)
+
+data class WaitlistTarget(
+    val pitch: Pitch,
+    val date: String,
+    val slot: String
 )
 
 class TurfViewModel(private val repository: TurfRepository) : ViewModel() {
@@ -48,6 +63,18 @@ class TurfViewModel(private val repository: TurfRepository) : ViewModel() {
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5000),
         initialValue = TurfRepository.getInitialPitches()
+    )
+
+    val reviews: StateFlow<List<PitchReview>> = repository.reviews.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = TurfRepository.getInitialReviews()
+    )
+
+    val waitlistEntries: StateFlow<List<WaitlistEntry>> = repository.waitlistEntries.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = TurfRepository.getInitialWaitlistEntries()
     )
 
     val bookings: StateFlow<List<Booking>> = repository.bookings.stateIn(
@@ -134,6 +161,115 @@ class TurfViewModel(private val repository: TurfRepository) : ViewModel() {
 
     fun closeTicket() {
         _uiState.value = _uiState.value.copy(activeTicket = null)
+    }
+
+    fun openRatePitchDialog(booking: Booking) {
+        _uiState.value = _uiState.value.copy(ratingBooking = booking)
+    }
+
+    fun closeRatePitchDialog() {
+        _uiState.value = _uiState.value.copy(ratingBooking = null)
+    }
+
+    fun openPitchReviewsDialog(pitch: Pitch) {
+        _uiState.value = _uiState.value.copy(viewingReviewsPitch = pitch)
+    }
+
+    fun closePitchReviewsDialog() {
+        _uiState.value = _uiState.value.copy(viewingReviewsPitch = null)
+    }
+
+    fun openJoinWaitlist(pitch: Pitch, date: String, slot: String) {
+        _uiState.value = _uiState.value.copy(waitlistTarget = WaitlistTarget(pitch, date, slot))
+    }
+
+    fun closeJoinWaitlist() {
+        _uiState.value = _uiState.value.copy(waitlistTarget = null)
+    }
+
+    fun joinWaitlist(
+        pitch: Pitch,
+        date: String,
+        slot: String,
+        customerName: String,
+        customerPhone: String,
+        teamName: String,
+        notes: String
+    ) {
+        viewModelScope.launch {
+            val timeSdf = SimpleDateFormat("dd MMM, HH:mm", Locale.getDefault())
+            val entry = WaitlistEntry(
+                id = "wl-${System.currentTimeMillis()}",
+                pitchId = pitch.id,
+                pitchName = pitch.name,
+                date = date,
+                slot = slot,
+                customerName = customerName,
+                customerPhone = customerPhone,
+                teamName = teamName,
+                notes = notes,
+                status = "WAITING",
+                createdAt = System.currentTimeMillis(),
+                createdTimeStr = timeSdf.format(Date())
+            )
+            repository.joinWaitlist(entry)
+            closeJoinWaitlist()
+            showToast(
+                if (_uiState.value.language == Language.SO)
+                    "Waad ku biirtay liiska sugitaanka ee ${slot}! Waxaa lagala soo xidhiidhi doonaa $customerPhone."
+                else
+                    "Joined waitlist for $slot! You will be notified at $customerPhone if the slot opens up."
+            )
+        }
+    }
+
+    fun removeWaitlistEntry(id: String) {
+        viewModelScope.launch {
+            repository.removeWaitlistEntry(id)
+            showToast(
+                if (_uiState.value.language == Language.SO)
+                    "Laga saaray liiska sugitaanka"
+                else
+                    "Waitlist request removed"
+            )
+        }
+    }
+
+    fun updateWaitlistStatus(id: String, status: String) {
+        viewModelScope.launch {
+            repository.updateWaitlistStatus(id, status)
+            showToast("Waitlist status updated to $status")
+        }
+    }
+
+    fun submitPitchReview(
+        booking: Booking,
+        rating: Int,
+        comment: String,
+        tags: List<String> = emptyList()
+    ) {
+        viewModelScope.launch {
+            val review = PitchReview(
+                id = "rev-${System.currentTimeMillis()}",
+                bookingId = booking.id,
+                pitchId = booking.pitchId,
+                pitchName = booking.pitchName,
+                customerName = booking.customerName.ifBlank { "Player" },
+                teamName = booking.teamName.ifBlank { "Team" },
+                rating = rating.coerceIn(1, 5),
+                comment = comment.trim(),
+                date = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date()),
+                tags = tags
+            )
+            repository.insertReview(review)
+            closeRatePitchDialog()
+            showToast(
+                if (_uiState.value.language == Language.SO)
+                    "Mahadsanid! Qiimeyntaadii garoonka (${rating} ⭐) si guul leh ayaa loo keydiyey!"
+                else
+                    "Thank you! Your review for ${booking.pitchName} (${rating} ⭐) was submitted!"
+            )
+        }
     }
 
     fun openRegisterTeam() {
@@ -518,6 +654,125 @@ class TurfViewModel(private val repository: TurfRepository) : ViewModel() {
 
     fun dismissUpcomingReminder() {
         _uiState.value = _uiState.value.copy(activeUpcomingReminder = null)
+    }
+
+    fun dismissTwoHourReminder() {
+        _uiState.value = _uiState.value.copy(activeTwoHourReminder = null)
+    }
+
+    fun openEmailPreview(reminder: TwoHourBookingReminder) {
+        _uiState.value = _uiState.value.copy(emailPreviewReminder = reminder)
+    }
+
+    fun closeEmailPreview() {
+        _uiState.value = _uiState.value.copy(emailPreviewReminder = null)
+    }
+
+    fun openTicketById(bookingIdOrRef: String) {
+        viewModelScope.launch {
+            val allBookings = bookings.value
+            val match = allBookings.find {
+                it.id == bookingIdOrRef || it.referenceCode.equals(bookingIdOrRef, ignoreCase = true)
+            }
+            if (match != null) {
+                _uiState.value = _uiState.value.copy(activeTicket = match, activeTab = 2)
+                showToast("Quick Access: Digital Ticket #${match.referenceCode}")
+            }
+        }
+    }
+
+    /**
+     * Runs the automated check for matches starting within the 2-hour window,
+     * triggering both system notifications with Quick Access ticket link and email dispatch.
+     */
+    fun runTwoHourReminderCheck(context: Context, forceBookingId: String? = null) {
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isTwoHourScannerRunning = true)
+            if (forceBookingId != null) delay(250)
+
+            val currentBookings = bookings.value
+            val reminders = TwoHourBookingReminderManager.checkAndDispatchTwoHourReminders(
+                context = context,
+                bookings = currentBookings,
+                forceBookingId = forceBookingId,
+                language = _uiState.value.language
+            )
+
+            val scanTime = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date())
+            val updatedHistory = (_uiState.value.dispatchedTwoHourReminders + reminders).distinctBy { it.id }
+
+            if (reminders.isNotEmpty()) {
+                val primary = reminders.first()
+                _uiState.value = _uiState.value.copy(
+                    activeTwoHourReminder = primary,
+                    dispatchedTwoHourReminders = updatedHistory,
+                    isTwoHourScannerRunning = false,
+                    lastTwoHourScanTime = scanTime
+                )
+                showToast("⚡ 2-Hour Alert sent to ${primary.customerEmail}! Tap notification or Quick Access button.")
+            } else {
+                _uiState.value = _uiState.value.copy(
+                    isTwoHourScannerRunning = false,
+                    lastTwoHourScanTime = scanTime
+                )
+                if (forceBookingId != null) {
+                    showToast("No match found for 2-hour reminder window.")
+                }
+            }
+        }
+    }
+
+    /**
+     * Manually triggers the automated 2-hour reminder (Push Notification + Email) for a specific booking.
+     */
+    fun triggerTwoHourReminderForBooking(context: Context, booking: Booking) {
+        runTwoHourReminderCheck(context, forceBookingId = booking.id)
+    }
+
+    /**
+     * Creates a match booking scheduled for approximately 2 hours from current time,
+     * and immediately dispatches the automated 2-hour reminder notification & email.
+     */
+    fun addTestTwoHourBooking(context: Context) {
+        viewModelScope.launch {
+            val cal = Calendar.getInstance()
+            val todayStr = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(cal.time)
+
+            // Target start time 2 hours from now
+            cal.add(Calendar.HOUR_OF_DAY, 2)
+            val startHour = cal.get(Calendar.HOUR_OF_DAY)
+            val startTimeStr = String.format(Locale.getDefault(), "%02d:00", startHour)
+            val endTimeStr = String.format(Locale.getDefault(), "%02d:00", (startHour + 1) % 24)
+
+            val testBooking = Booking(
+                id = "b-2hr-${System.currentTimeMillis()}",
+                referenceCode = "JSC-${Random.nextInt(1000, 9999)}",
+                pitchId = "pitch-1",
+                pitchName = "Pitch 1 - Championship Arena",
+                date = todayStr,
+                startTime = startTimeStr,
+                endTime = endTimeStr,
+                durationHours = 1,
+                customerName = "Axmed Cali",
+                teamName = "26 June Warriors FC",
+                customerPhone = "+252633347832",
+                customerEmail = "foscar2019@gmail.com",
+                paymentMethod = PaymentMethod.ZAAD,
+                paymentStatus = "paid",
+                transactionId = "ZD-2HR-${Random.nextInt(10000, 99999)}",
+                merchantNumber = "445686",
+                totalAmount = 25.0,
+                loyaltyPoints = 250,
+                addOns = listOf("addon-bibs"),
+                notes = "Automated 2-Hour Kick-off Reminder Test",
+                createdAt = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(Date())
+            )
+
+            repository.insertBooking(testBooking)
+            showToast("Test match added for today at $startTimeStr. Dispatching 2-hour reminder & email...")
+            delay(400)
+            runTwoHourReminderCheck(context, forceBookingId = testBooking.id)
+        }
     }
 
     /**
