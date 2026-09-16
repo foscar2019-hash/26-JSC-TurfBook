@@ -206,11 +206,14 @@ fun TurfBookApp(viewModel: TurfViewModel) {
                     onTriggerBookingReminder = { viewModel.triggerTwoHourReminderForBooking(it, context) },
                     onOpenEmailPreview = { viewModel.openEmailPreview(it) },
                     dispatchedReminders = uiState.dispatchedTwoHourReminders,
-                    isTwoHourScannerRunning = uiState.isTwoHourScannerRunning
+                    isTwoHourScannerRunning = uiState.isTwoHourScannerRunning,
+                    registeredTeams = teams,
+                    onNavigateToBook = { viewModel.setTab(1) }
                 )
                 3 -> TeamsScreen(
                     teams = teams,
                     challenges = challenges,
+                    bookings = bookings,
                     language = uiState.language,
                     onOpenRegister = { viewModel.openRegisterTeam() },
                     onOpenChallenge = { viewModel.openChallengeDialog(it) },

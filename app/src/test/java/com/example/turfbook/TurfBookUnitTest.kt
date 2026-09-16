@@ -547,6 +547,71 @@ class TurfBookUnitTest {
         val farTime = java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault()).format(farCal.time)
         assertFalse(BookingTimeHelper.isWithinTwoHourWindow(farDate, farTime))
     }
+
+    @Test
+    fun testTeamLoyaltyTiersAndThresholds() {
+        // Less than 3 completed bookings -> BRONZE
+        assertEquals(TeamLoyaltyTier.BRONZE, TeamLoyaltyTier.fromCompletedBookings(0))
+        assertEquals(TeamLoyaltyTier.BRONZE, TeamLoyaltyTier.fromCompletedBookings(2))
+        assertFalse(TeamLoyaltyTier.BRONZE.isHighlighted)
+        assertEquals(0, TeamLoyaltyTier.BRONZE.discountPercent)
+
+        // 3 to 4 completed bookings -> SILVER
+        assertEquals(TeamLoyaltyTier.SILVER, TeamLoyaltyTier.fromCompletedBookings(3))
+        assertEquals(TeamLoyaltyTier.SILVER, TeamLoyaltyTier.fromCompletedBookings(4))
+        assertFalse(TeamLoyaltyTier.SILVER.isHighlighted)
+        assertEquals(5, TeamLoyaltyTier.SILVER.discountPercent)
+
+        // 5 to 9 completed bookings -> GOLD
+        assertEquals(TeamLoyaltyTier.GOLD, TeamLoyaltyTier.fromCompletedBookings(5))
+        assertEquals(TeamLoyaltyTier.GOLD, TeamLoyaltyTier.fromCompletedBookings(9))
+        assertTrue(TeamLoyaltyTier.GOLD.isHighlighted)
+        assertEquals(10, TeamLoyaltyTier.GOLD.discountPercent)
+        assertEquals("👑", TeamLoyaltyTier.GOLD.badgeEmoji)
+
+        // 10+ completed bookings -> PLATINUM
+        assertEquals(TeamLoyaltyTier.PLATINUM, TeamLoyaltyTier.fromCompletedBookings(10))
+        assertEquals(TeamLoyaltyTier.PLATINUM, TeamLoyaltyTier.fromCompletedBookings(18))
+        assertTrue(TeamLoyaltyTier.PLATINUM.isHighlighted)
+        assertEquals(15, TeamLoyaltyTier.PLATINUM.discountPercent)
+        assertEquals("💎", TeamLoyaltyTier.PLATINUM.badgeEmoji)
+    }
+
+    @Test
+    fun testTeamLoyaltyCalculator() {
+        val warriors = TeamLoyaltyCalculator.getTeamLoyaltyInfo("26 June Warriors FC", emptyList())
+        assertEquals(13, warriors.completedBookings)
+        assertEquals(TeamLoyaltyTier.PLATINUM, warriors.loyaltyTier)
+        assertTrue(warriors.isGoldOrPlatinum)
+
+        val elman = TeamLoyaltyCalculator.getTeamLoyaltyInfo("Elman Hargeisa Stars", emptyList())
+        assertEquals(10, elman.completedBookings)
+        assertEquals(TeamLoyaltyTier.PLATINUM, elman.loyaltyTier)
+        assertTrue(elman.isGoldOrPlatinum)
+
+        val burao = TeamLoyaltyCalculator.getTeamLoyaltyInfo("Burao United FC", emptyList())
+        assertEquals(7, burao.completedBookings)
+        assertEquals(TeamLoyaltyTier.GOLD, burao.loyaltyTier)
+        assertTrue(burao.isGoldOrPlatinum)
+
+        val banaadir = TeamLoyaltyCalculator.getTeamLoyaltyInfo("Banaadir United", emptyList())
+        assertEquals(5, banaadir.completedBookings)
+        assertEquals(TeamLoyaltyTier.GOLD, banaadir.loyaltyTier)
+        assertTrue(banaadir.isGoldOrPlatinum)
+
+        val shacabka = TeamLoyaltyCalculator.getTeamLoyaltyInfo("Shacabka Stars FC", emptyList())
+        assertEquals(4, shacabka.completedBookings)
+        assertEquals(TeamLoyaltyTier.SILVER, shacabka.loyaltyTier)
+        assertFalse(shacabka.isGoldOrPlatinum)
+    }
+
+    @Test
+    fun testUserPlatinumLoyaltyTier() {
+        assertEquals(LoyaltyTier.PLATINUM, LoyaltyTier.fromPoints(2500))
+        assertEquals(LoyaltyTier.PLATINUM, LoyaltyTier.fromPoints(3200))
+        assertEquals(15, LoyaltyTier.PLATINUM.discountPercent)
+        assertEquals("💎", LoyaltyTier.PLATINUM.badgeIcon)
+    }
 }
 
 

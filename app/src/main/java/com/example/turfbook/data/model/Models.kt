@@ -96,10 +96,20 @@ enum class LoyaltyTier(
         discountPercent = 10,
         perkEn = "10% off pitch hire • Free match ball & VIP lounge priority",
         perkSo = "10% qiimo dhimis • Kubad ciyaareed bilaash ah & VIP Lounge"
+    ),
+    PLATINUM(
+        title = "Platinum",
+        somaliTitle = "Platinum (Balaatiin)",
+        badgeIcon = "💎",
+        minPoints = 2500,
+        discountPercent = 15,
+        perkEn = "15% off pitch hire • Free match ball & VIP priority booking window",
+        perkSo = "15% qiimo dhimis • Kubad bilaash ah & mudnaanta ballamaha VIP"
     );
 
     companion object {
         fun fromPoints(points: Int): LoyaltyTier = when {
+            points >= 2500 -> PLATINUM
             points >= 1000 -> GOLD
             points >= 500 -> SILVER
             else -> BRONZE
@@ -772,4 +782,151 @@ data class TeamLoyaltyLeaderboardEntry(
         }
     }
 }
+
+@Serializable
+enum class TeamLoyaltyTier(
+    val tierName: String,
+    val somaliTierName: String,
+    val badgeIcon: String,
+    val badgeEmoji: String,
+    val minCompletedBookings: Int,
+    val discountPercent: Int,
+    val perkEn: String,
+    val perkSo: String,
+    val isHighlighted: Boolean // true for Platinum and Gold
+) {
+    PLATINUM(
+        tierName = "Platinum",
+        somaliTierName = "Balaatiin",
+        badgeIcon = "💎",
+        badgeEmoji = "💎",
+        minCompletedBookings = 10,
+        discountPercent = 15,
+        perkEn = "Platinum Status • 10+ Completed Matches • 15% VIP Pitch Discount",
+        perkSo = "Heerka Balaatiin • 10+ Kulan oo la ciyaaray • 15% Qiimo-dhimis VIP ah",
+        isHighlighted = true
+    ),
+    GOLD(
+        tierName = "Gold",
+        somaliTierName = "Dahab",
+        badgeIcon = "👑",
+        badgeEmoji = "👑",
+        minCompletedBookings = 5,
+        discountPercent = 10,
+        perkEn = "Gold Status • 5+ Completed Matches • 10% Match Discount",
+        perkSo = "Heerka Dahab • 5+ Kulan oo la ciyaaray • 10% Qiimo-dhimis",
+        isHighlighted = true
+    ),
+    SILVER(
+        tierName = "Silver",
+        somaliTierName = "Qalin",
+        badgeIcon = "🥈",
+        badgeEmoji = "🥈",
+        minCompletedBookings = 3,
+        discountPercent = 5,
+        perkEn = "Silver Status • 3+ Completed Matches • Free Team Bibs",
+        perkSo = "Heerka Qalin • 3+ Kulan oo la ciyaaray • Jaakadaha bilaash ah",
+        isHighlighted = false
+    ),
+    BRONZE(
+        tierName = "Bronze",
+        somaliTierName = "Naxaas",
+        badgeIcon = "🥉",
+        badgeEmoji = "🛡️",
+        minCompletedBookings = 0,
+        discountPercent = 0,
+        perkEn = "Bronze Contender • 10 pts per $1 spent",
+        perkSo = "Heerka Naxaas • 10 dhibcood $1 kasta oo la bixiyo",
+        isHighlighted = false
+    );
+
+    companion object {
+        fun fromCompletedBookings(count: Int): TeamLoyaltyTier = when {
+            count >= 10 -> PLATINUM
+            count >= 5 -> GOLD
+            count >= 3 -> SILVER
+            else -> BRONZE
+        }
+    }
+}
+
+@Serializable
+data class TeamLoyaltyInfo(
+    val teamName: String,
+    val completedBookings: Int,
+    val loyaltyTier: TeamLoyaltyTier,
+    val totalHours: Int = completedBookings,
+    val loyaltyPoints: Int = completedBookings * 250
+) {
+    val isGoldOrPlatinum: Boolean get() = loyaltyTier.isHighlighted
+}
+
+object TeamLoyaltyCalculator {
+    // Baseline completed booking counts from verified arena records
+    private val baselineTeamCompleted = mapOf(
+        "26 June Warriors FC" to 13,
+        "Elman Hargeisa Stars" to 10,
+        "Burao United FC" to 7,
+        "Banaadir United" to 5,
+        "Shacabka Stars FC" to 4,
+        "Hargeisa Lions FC" to 2
+    )
+
+    fun getTeamLoyaltyInfo(
+        teamName: String,
+        bookings: List<Booking>,
+        registeredTeams: List<Team> = emptyList()
+    ): TeamLoyaltyInfo {
+        val todayStr = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault()).format(java.util.Date())
+
+        val baseCount = baselineTeamCompleted[teamName]
+            ?: registeredTeams.find { it.name.equals(teamName, ignoreCase = true) }?.stats?.matchesPlayed
+            ?: 0
+
+        var dynCount = 0
+        var dynHours = 0
+        var dynPoints = 0
+
+        for (b in bookings) {
+            if (b.teamName.equals(teamName, ignoreCase = true)) {
+                val isCompleted = b.paymentStatus == "paid" && (
+                    BookingTimeHelper.isBookingTimePassed(b.date, b.endTime) ||
+                    b.date < todayStr ||
+                    b.notes.contains("finished", ignoreCase = true) ||
+                    b.smsConfirmed
+                )
+                if (isCompleted) {
+                    dynCount++
+                    dynHours += b.durationHours
+                    dynPoints += b.loyaltyPoints
+                }
+            }
+        }
+
+        val totalCompleted = baseCount + dynCount
+        val tier = TeamLoyaltyTier.fromCompletedBookings(totalCompleted)
+
+        return TeamLoyaltyInfo(
+            teamName = teamName,
+            completedBookings = totalCompleted,
+            loyaltyTier = tier,
+            totalHours = totalCompleted + dynHours,
+            loyaltyPoints = (totalCompleted * 250) + dynPoints
+        )
+    }
+
+    fun getAllTeamLoyalties(
+        teams: List<Team>,
+        bookings: List<Booking>
+    ): Map<String, TeamLoyaltyInfo> {
+        val map = mutableMapOf<String, TeamLoyaltyInfo>()
+        for (team in teams) {
+            val info = getTeamLoyaltyInfo(team.name, bookings, teams)
+            map[team.name] = info
+            map[team.id] = info
+        }
+        return map
+    }
+}
+
 

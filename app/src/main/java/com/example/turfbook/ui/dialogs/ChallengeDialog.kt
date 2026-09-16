@@ -18,6 +18,9 @@ import com.example.turfbook.data.model.AppConfig
 import com.example.turfbook.data.model.Language
 import com.example.turfbook.data.model.Pitch
 import com.example.turfbook.data.model.Team
+import com.example.turfbook.data.model.TeamLoyaltyCalculator
+import com.example.turfbook.ui.components.BadgeDisplaySize
+import com.example.turfbook.ui.components.TeamLoyaltyBadge
 import com.example.turfbook.ui.theme.*
 import java.text.SimpleDateFormat
 import java.util.Calendar
@@ -93,32 +96,61 @@ fun ChallengeDialog(
                         .fillMaxWidth()
                         .padding(vertical = 8.dp)
                 ) {
-                    Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Text(opponentTeam.logoEmoji, fontSize = 24.sp)
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Column {
-                            Text("Challenging: ${opponentTeam.name}", color = AmberGold, fontWeight = FontWeight.Bold)
-                            Text("Captain: ${opponentTeam.captainName} (${opponentTeam.captainPhone})", color = TextSecondary, fontSize = 11.sp)
+                    val opponentLoyalty = remember(opponentTeam) {
+                        TeamLoyaltyCalculator.getTeamLoyaltyInfo(opponentTeam.name, emptyList(), allTeams)
+                    }
+
+                    Row(
+                        modifier = Modifier.padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(opponentTeam.logoEmoji, fontSize = 24.sp)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Column {
+                                Text("Challenging: ${opponentTeam.name}", color = AmberGold, fontWeight = FontWeight.Bold)
+                                Text("Captain: ${opponentTeam.captainName} (${opponentTeam.captainPhone})", color = TextSecondary, fontSize = 11.sp)
+                            }
+                        }
+                        if (opponentLoyalty.isGoldOrPlatinum) {
+                            TeamLoyaltyBadge(
+                                tier = opponentLoyalty.loyaltyTier,
+                                size = BadgeDisplaySize.COMPACT
+                            )
                         }
                     }
                 }
 
                 Text("Select Your Club:", color = TextSecondary, fontSize = 12.sp)
                 eligibleChallengers.forEach { team ->
+                    val teamLoyalty = remember(team) {
+                        TeamLoyaltyCalculator.getTeamLoyaltyInfo(team.name, emptyList(), allTeams)
+                    }
+
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clickable { selectedChallengerId = team.id }
                             .padding(vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        RadioButton(
-                            selected = team.id == selectedChallengerId,
-                            onClick = { selectedChallengerId = team.id },
-                            colors = RadioButtonDefaults.colors(selectedColor = EmeraldPrimary)
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text("${team.logoEmoji} ${team.name}", color = Color.White, fontSize = 13.sp)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            RadioButton(
+                                selected = team.id == selectedChallengerId,
+                                onClick = { selectedChallengerId = team.id },
+                                colors = RadioButtonDefaults.colors(selectedColor = EmeraldPrimary)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("${team.logoEmoji} ${team.name}", color = Color.White, fontSize = 13.sp)
+                        }
+                        if (teamLoyalty.isGoldOrPlatinum) {
+                            TeamLoyaltyBadge(
+                                tier = teamLoyalty.loyaltyTier,
+                                size = BadgeDisplaySize.COMPACT
+                            )
+                        }
                     }
                 }
 
