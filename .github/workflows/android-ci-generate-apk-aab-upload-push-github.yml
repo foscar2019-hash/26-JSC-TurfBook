@@ -1,0 +1,65 @@
+name: Android CI - Generate APK & AAB, Upload & Push to GitHub Releases
+
+on:
+  push:
+    branches: [ "main", "master" ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build APK & AAB
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+
+      - name: Build Debug APK & Release Bundle (AAB)
+        run: gradle :app:assembleDebug :app:bundleRelease --stacktrace
+
+      - name: Upload APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: 26-JSC-TurfBook-APK
+          path: app/build/outputs/apk/debug/*.apk
+          retention-days: 14
+
+      - name: Upload AAB Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: 26-JSC-TurfBook-AAB
+          path: app/build/outputs/bundle/release/*.aab
+          retention-days: 14
+
+      - name: Publish Direct Release Download (APK & AAB)
+        uses: softprops/action-gh-release@v2
+        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/')
+        with:
+          tag_name: "v1.0.${{ github.run_number }}"
+          name: "26 JSC TurfBook Build #${{ github.run_number }}"
+          body: |
+            ### 26 JSC TurfBook Android Build
+            Automated build generated via GitHub Actions.
+
+            #### Direct Download:
+            - **`app-debug.apk`**: Install directly on your Android device.
+            - **`app-release.aab`**: Android App Bundle for Google Play Console distribution.
+          draft: false
+          prerelease: false
+          files: |
+            app/build/outputs/apk/debug/*.apk
+            app/build/outputs/bundle/release/*.aab
